@@ -26,10 +26,10 @@ REGLAS ESTRICTAS DE IDIOMA Y EXPANSIÓN:
 1) IMAGEN 1: identifica nombre y el idioma. Si la carta está en japonés o tiene texto japonés, language_code DEBE ser JA.
 2) IMAGEN 2: recorte ampliado de la esquina inferior izquierda. Lee el código de colección y el número.
 3) SI language_code = JA: usa EXCLUSIVAMENTE el catálogo japonés de abajo. No uses códigos occidentales aunque se parezcan. Conserva el código japonés (por ejemplo SV8A, SV9A, SV1S, M2A, M3).
-4) SI language_code != JA: lee el código occidental IMPRESO en la carta aunque PokeScan todavía no lo conozca. Un código nuevo es válido. No lo sustituyas por otro código parecido y no conviertas una carta occidental a un código japonés.
+4) SI language_code != JA: usa EXCLUSIVAMENTE el catálogo occidental que ya conoce PokeScan. No conviertas una carta occidental a un código japonés.
 5) En cartas japonesas, el código puede estar en minúsculas en la impresión (sv8a); devuélvelo normalizado en mayúsculas (SV8A).
-6) En cualquier idioma, usa el número de coleccionista junto al código para confirmar la lectura. Ejemplos válidos de formato: 30C 002, PFL 038, DRI 218.
-7) Si el código o número no se ve con seguridad, déjalo vacío. No inventes códigos.
+6) En cartas japonesas, usa el número de coleccionista para confirmar el código.
+7) Si el código no se ve con seguridad, déjalo vacío. No inventes códigos.
 8) expansion DEBE ser vacío. PokeScan decide el nombre internamente según el idioma y el código.
 9) number debe ser solo el número de coleccionista, sin /total.
 
