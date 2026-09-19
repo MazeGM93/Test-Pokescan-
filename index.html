@@ -957,7 +957,33 @@ function promoParentExpansion(code,number,apiExpansion){
     173:'Prismatic Evolutions',189:'Journey Together',203:'Destined Rivals',209:'Black Bolt',210:'White Flare'
   };
   if(c==='SVP' && svp[n]) return svp[n];
+  if(c==='SV-P') return 'Scarlet & Violet Black Star Promos';
   return '';
+}
+
+async function fetchJapaneseScannerName(code, number){
+  try{
+    const rawCode=String(code||'').trim().toUpperCase();
+    const rawNum=String(number||'').trim().split('/')[0];
+    if(!rawCode || !rawNum || rawCode==='SV-P') return null;
+    // Limitless usa la última letra en minúscula en los códigos japoneses
+    // (SV5a, SV9a, etc.). Los códigos sin letra final se conservan.
+    const jpCode=/^[A-Z]{1,4}\d+[A-Z]$/.test(rawCode)
+      ? rawCode.slice(0,-1)+rawCode.slice(-1).toLowerCase()
+      : rawCode;
+    const n=String(rawNum).replace(/^0+/,'')||rawNum;
+    const r=await fetch('/api/jp-card-name',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:jpCode,number:n})
+    });
+    if(!r.ok) return null;
+    const j=await r.json();
+    return j?.name ? j : null;
+  }catch(e){ return null; }
+}
+function containsJapaneseText(value){
+  return /[\u3040-\u30ff\u3400-\u9fff]/.test(String(value||''));
 }
 
 async function enrichCardFromTCGdex(x){
@@ -988,6 +1014,14 @@ async function enrichCardFromTCGdex(x){
         const hit=await r.json();
         if(hit?.name){
           x.name=String(hit.name).trim()||x.name;
+          // En japonés el nombre debe ser el nombre impreso/JP, no la traducción
+          // inglesa que algunas fuentes devuelven aunque la búsqueda sea /ja.
+          if(japaneseCode && !containsJapaneseText(x.name)){
+            const jpHit=await fetchJapaneseScannerName(code,target);
+            if(jpHit?.name) x.name=String(jpHit.name).trim();
+            if(jpHit?.imageUrl && !x.imageUrl) x.imageUrl=String(jpHit.imageUrl).trim();
+            if(jpHit?.sourceUrl) x.sourceUrl=String(jpHit.sourceUrl).trim();
+          }
           if(hit?.set?.name) x.expansion=canonicalExternalExpansion(code,String(hit.set.name).trim());
           if(hit?.set?.id && !x.set_code) x.set_code=String(hit.set.id).trim().toUpperCase();
           const cmId=hit?.pricing?.cardmarket?.idProduct||hit?.thirdParty?.cardmarket||hit?.cardmarketProductId||'';
@@ -1003,6 +1037,18 @@ async function enrichCardFromTCGdex(x){
         }
       }
     }catch(e){ console.warn('Enriquecimiento por código:',e); }
+
+    // Si la fuente exacta no devolvió nombre para una carta japonesa, recuperamos
+    // exclusivamente el nombre japonés por código+número. No afecta al buscador manual.
+    if(japaneseCode && !containsJapaneseText(x.name)){
+      const jpHit=await fetchJapaneseScannerName(code,num);
+      if(jpHit?.name){
+        x.name=String(jpHit.name).trim();
+        if(jpHit.imageUrl && !x.imageUrl) x.imageUrl=String(jpHit.imageUrl).trim();
+        if(jpHit.sourceUrl) x.sourceUrl=String(jpHit.sourceUrl).trim();
+        return x;
+      }
+    }
 
     // Respaldo para cartas antiguas/compatibilidad: búsqueda por nombre en TCGdex.
     const name=String(x?.name||'').trim();
@@ -2958,7 +3004,7 @@ function setSaveEnabled(enabled){
 window.POKESCAN_EXPANSION_DB={ "sets": {"PBL": "Pitch Black", "CRI": "Chaos Rising", "POR": "Perfect Order", "ASC": "Héroes Ascendentes", "PHF": "Phantasmal Flames", "PFL": "Llamas Fantasmales", "MEG": "Megaevolución", "MEP": "Megaevolución — Cartas Promo", "MEE": "Mega Evolution Energy", "BLK": "Black Bolt", "WHT": "White Flare", "DRI": "Destined Rivals", "JTG": "Journey Together", "PRE": "Prismatic Evolutions", "PAF": "Paldean Fates", "SSP": "Surging Sparks", "SCR": "Stellar Crown", "SFA": "Shrouded Fable", "TWM": "Twilight Masquerade", "TEF": "Temporal Forces", "PAR": "Paradox Rift", "MEW": "151", "OBF": "Obsidian Flames", "PAL": "Paldea Evolved", "SVI": "Scarlet & Violet", "CRZ": "Cenit Supremo", "SIT": "Silver Tempest", "LOR": "Lost Origin", "PGO": "Pokémon GO", "ASR": "Astral Radiance", "BRS": "Brilliant Stars", "FST": "Fusion Strike", "EVS": "Evolving Skies", "CRE": "Chilling Reign", "BST": "Battle Styles", "SHF": "Shining Fates", "VIV": "Vivid Voltage", "CPA": "Champion’s Path", "DAA": "Darkness Ablaze", "RCL": "Rebel Clash", "SSH": "Sword & Shield", "CEC": "Cosmic Eclipse", "HIF": "Hidden Fates", "UNB": "Unbroken Bonds", "UNM": "Unified Minds", "DET": "Detective Pikachu", "TEU": "Unión de Aliados", "LOT": "Lost Thunder", "DRM": "Dragon Majesty", "CES": "Celestial Storm", "FLI": "Forbidden Light", "UPR": "Ultra Prism", "CIN": "Crimson Invasion", "BUS": "Burning Shadows", "GRI": "Guardians Rising", "SUM": "Sun & Moon", "EVO": "Evolutions", "STS": "Steam Siege", "FCO": "Fates Collide", "GEN": "Generations", "BKT": "BREAKthrough", "BKP": "BREAKpoint", "AOR": "Ancient Origins", "ROS": "Roaring Skies", "PRC": "Primal Clash", "FLF": "Flashfire", "XY": "XY", "PLS": "Plasma Storm", "PLF": "Plasma Freeze", "PLB": "Plasma Blast", "BCR": "Boundaries Crossed", "DRV": "Dragon Vault", "DRX": "Dragons Exalted", "DEX": "Dark Explorers", "NXD": "Next Destinies", "NVI": "Noble Victories", "EPO": "Emerging Powers", "BLW": "Black & White", "LTR": "Legendary Treasures", "PL": "Platinum", "AR": "Arceus", "SV": "Supreme Victors", "RR": "Rising Rivals", "SF": "Stormfront", "LA": "Legends Awakened", "MD": "Majestic Dawn", "GE": "Great Encounters", "SW": "Secret Wonders", "DP": "Diamond & Pearl", "MT": "Mysterious Treasures", "POP": "POP Series", "HS": "HeartGold & SoulSilver", "UL": "HS—Unleashed", "UD": "HS—Undaunted", "TM": "HS—Triumphant", "CL": "Call of Legends", "HGSS": "HGSS Black Star Promos", "BS": "Base Set", "JU": "Jungle", "FO": "Fossil", "B2": "Base Set 2", "TR": "Team Rocket", "G1": "Gym Heroes", "G2": "Gym Challenge", "N1": "Neo Genesis", "N2": "Neo Discovery", "N3": "Neo Revelation", "N4": "Neo Destiny", "LC": "Legendary Collection", "EX": "Expedition Base Set", "AQ": "Aquapolis", "SK": "Skyridge", "RS": "Ruby & Sapphire", "SS": "Sandstorm", "DR": "Dragon", "MA": "Team Magma vs Team Aqua", "HL": "Hidden Legends", "RG": "FireRed & LeafGreen", "RRR": "Team Rocket Returns", "EM": "Emerald", "UF": "Unseen Forces", "DS": "Delta Species", "LM": "Legend Maker", "HP": "Holon Phantoms", "CG": "Crystal Guardians", "DF": "Dragon Frontiers", "PK": "Power Keepers", "SVP": "Escarlata y Púrpura — Cartas Promo", "30C": "30th Celebration", "SM": "Sol y Luna — Promos Estrella Negra"}, "aliases": {"PVL": "PFL", "MEP": "MEP", "ASC": "ASC", "CRZ": "CRZ", "MEW": "MEW"}};
 
 const POKESCAN_EXPANSION_DB=window.POKESCAN_EXPANSION_DB;
-window.POKESCAN_JP_SET_DB={"SV1S":"Scarlet ex","SV1V":"Violet ex","SV1A":"Triplet Beat","SV2P":"Snow Hazard","SV2D":"Clay Burst","SV2A":"Pokémon Card 151","SV3":"Ruler of the Black Flame","SV3A":"Raging Surf","SV4M":"Future Flash","SV4K":"Ancient Roar","SV4A":"Shiny Treasure ex","SV5K":"Wild Force","SV5M":"Cyber Judge","SV5A":"Crimson Haze","SV6":"Mask of Change","SV6A":"Night Wanderer","SV7":"Stellar Miracle","SV7A":"Paradise Dragona","SV8":"Super Electric Breaker","SV8A":"Terastal Festival ex","SV9":"Battle Partners","SV9A":"Heat Wave Arena","SV10":"The Glory of Team Rocket","SV11B":"Black Bolt","SV11W":"White Flare","M1L":"Mega Brave","M1S":"Mega Symphonia","M2":"Inferno X","M2A":"Mega Dream ex","M3":"Nihil Zero","M4":"Ninja Spinner","M5":"Abyss Eye","M6":"Storm Emeralda","S1W":"Shield","S1H":"Sword","S2":"Rebel Clash","S3":"Infinity Zone","S3A":"Legendary Heartbeat","S4":"Amazing Volt Tackle","S4A":"Shiny Star V","S5I":"Ichigeki Master","S5R":"Rapid Strike Master","S6H":"Silver Lance","S6K":"Jet Black Spirit","S6A":"Matchless Fighter","S7D":"Skyscraping Perfection","S7R":"Blue Sky Stream","S7A":"Eevee Heroes","S8":"Fusion Arts","S8A":"25th Anniversary Collection","S8B":"VMAX Climax","S9":"Star Birth","S9A":"Battle Region","S10D":"Time Gazer","S10P":"Space Juggler","S10A":"Dark Phantasma","S11":"Lost Abyss","S11A":"Incandescent Arcana","S12":"Paradigm Trigger","S12A":"VSTAR Universe","SM1S":"Collection Sun","SM1M":"Collection Moon","SM2L":"Alolan Moonlight","SM2K":"Alolan Kokoro","SM3H":"Hibana","SM3N":"A Clash of the Sky and Sea","SM4S":"Awakened Heroes","SM4A":"Crack Shot","SM5S":"Ultra Sun","SM5M":"Ultra Moon","SM6S":"Forbidden Light","SM6B":"Forbidden Light","SM7":"Thunderclap Spark","SM8":"Super Burst Impact","SM8B":"Dark Order","SM9":"Tag Bolt","SM9A":"Night Unison","SM10":"Double Blaze","SM10A":"GG End","SM11":"Miracle Twin","SM11B":"Dream League","SM12":"Alter Genesis","SM12A":"Tag All Stars","XY1":"Collection X / Collection Y","XY2":"Wild Blaze","XY3":"Rising Fist","XY4":"Phantom Gate","XY5":"Gaia Volcano / Tidal Storm","XY6":"Emerald Break","XY7":"Bandit Ring","XY8":"Red Flash / Blue Impact","XY9":"Rage of the Broken Sky","XY10":"The Best of XY","XY11":"Cruel Traitor / Explosive Fighter","XY12":"20th Anniversary Festa","BW1":"Black Collection / White Collection","BW2":"Red Collection","BW3":"Psycho Drive / Hail Blizzard","BW4":"Dark Rush","BW5":"Dragon Blade / Dragon Blast","BW6":"Freeze Bolt / Cold Flare","BW7":"Plasma Gale","BW8":"Spiral Force / Thunder Knuckle","BW9":"Megalo Cannon","BW10":"EX Battle Boost","MP1":"Start Deck 100 Battle Collection","M-P":"Promotional Cards","SVP":"Scarlet & Violet Black Star Promos","M-PRO":"Mega Evolution Promotional Cards"};
+window.POKESCAN_JP_SET_DB={"SV-P":"Scarlet & Violet Black Star Promos","SV1S":"Scarlet ex","SV1V":"Violet ex","SV1A":"Triplet Beat","SV2P":"Snow Hazard","SV2D":"Clay Burst","SV2A":"Pokémon Card 151","SV3":"Ruler of the Black Flame","SV3A":"Raging Surf","SV4M":"Future Flash","SV4K":"Ancient Roar","SV4A":"Shiny Treasure ex","SV5K":"Wild Force","SV5M":"Cyber Judge","SV5A":"Crimson Haze","SV6":"Mask of Change","SV6A":"Night Wanderer","SV7":"Stellar Miracle","SV7A":"Paradise Dragona","SV8":"Super Electric Breaker","SV8A":"Terastal Festival ex","SV9":"Battle Partners","SV9A":"Heat Wave Arena","SV10":"The Glory of Team Rocket","SV11B":"Black Bolt","SV11W":"White Flare","M1L":"Mega Brave","M1S":"Mega Symphonia","M2":"Inferno X","M2A":"Mega Dream ex","M3":"Nihil Zero","M4":"Ninja Spinner","M5":"Abyss Eye","M6":"Storm Emeralda","S1W":"Shield","S1H":"Sword","S2":"Rebel Clash","S3":"Infinity Zone","S3A":"Legendary Heartbeat","S4":"Amazing Volt Tackle","S4A":"Shiny Star V","S5I":"Ichigeki Master","S5R":"Rapid Strike Master","S6H":"Silver Lance","S6K":"Jet Black Spirit","S6A":"Matchless Fighter","S7D":"Skyscraping Perfection","S7R":"Blue Sky Stream","S7A":"Eevee Heroes","S8":"Fusion Arts","S8A":"25th Anniversary Collection","S8B":"VMAX Climax","S9":"Star Birth","S9A":"Battle Region","S10D":"Time Gazer","S10P":"Space Juggler","S10A":"Dark Phantasma","S11":"Lost Abyss","S11A":"Incandescent Arcana","S12":"Paradigm Trigger","S12A":"VSTAR Universe","SM1S":"Collection Sun","SM1M":"Collection Moon","SM2L":"Alolan Moonlight","SM2K":"Alolan Kokoro","SM3H":"Hibana","SM3N":"A Clash of the Sky and Sea","SM4S":"Awakened Heroes","SM4A":"Crack Shot","SM5S":"Ultra Sun","SM5M":"Ultra Moon","SM6S":"Forbidden Light","SM6B":"Forbidden Light","SM7":"Thunderclap Spark","SM8":"Super Burst Impact","SM8B":"Dark Order","SM9":"Tag Bolt","SM9A":"Night Unison","SM10":"Double Blaze","SM10A":"GG End","SM11":"Miracle Twin","SM11B":"Dream League","SM12":"Alter Genesis","SM12A":"Tag All Stars","XY1":"Collection X / Collection Y","XY2":"Wild Blaze","XY3":"Rising Fist","XY4":"Phantom Gate","XY5":"Gaia Volcano / Tidal Storm","XY6":"Emerald Break","XY7":"Bandit Ring","XY8":"Red Flash / Blue Impact","XY9":"Rage of the Broken Sky","XY10":"The Best of XY","XY11":"Cruel Traitor / Explosive Fighter","XY12":"20th Anniversary Festa","BW1":"Black Collection / White Collection","BW2":"Red Collection","BW3":"Psycho Drive / Hail Blizzard","BW4":"Dark Rush","BW5":"Dragon Blade / Dragon Blast","BW6":"Freeze Bolt / Cold Flare","BW7":"Plasma Gale","BW8":"Spiral Force / Thunder Knuckle","BW9":"Megalo Cannon","BW10":"EX Battle Boost","MP1":"Start Deck 100 Battle Collection","M-P":"Promotional Cards","SVP":"Scarlet & Violet Black Star Promos","M-PRO":"Mega Evolution Promotional Cards"};
 const POKESCAN_JP_SET_DB=window.POKESCAN_JP_SET_DB;
 function isJapaneseSetCode(code){return !!POKESCAN_JP_SET_DB[String(code||'').trim().toUpperCase()];}
 
@@ -2966,6 +3012,10 @@ function isJapaneseSetCode(code){return !!POKESCAN_JP_SET_DB[String(code||'').tr
 function normalizeSetCode(raw){
   const s=String(raw||'').toUpperCase().trim();
   if(!s) return '';
+  // PROMO 195/SV-P es una promo japonesa. No debe convertirse en SVP:
+  // SV-P = japonés; SVP + número = promo occidental.
+  if(/^(?:PROMO\s*)?\d+\s*\/\s*SV-P$/.test(s)) return 'SV-P';
+  if(/^SV-P$/.test(s)) return 'SV-P';
   if(/(^|[^A-Z0-9])30C([^A-Z0-9]|$)/.test(s)) return '30C';
   const clean=s.replace(/[^A-Z0-9]/g,'');
   if(POKESCAN_EXPANSION_DB.sets[clean] || POKESCAN_JP_SET_DB[clean]) return clean;
