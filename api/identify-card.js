@@ -28,6 +28,8 @@ REGLAS ESTRICTAS DE IDIOMA, CÓDIGO Y EXPANSIÓN:
 3) IGNORA cualquier pequeño marcador de idioma impreso junto al código, como ES, EN, JP, JA, FR, DE, IT, PT o KO. Por ejemplo, "PFL ES 100" debe devolver set_code="PFL" y number="100".
 4) No unas el código principal con las letras del idioma. "MEP ES 097" significa MEP + 097, no MEPES.
 5) En cartas japonesas conserva el código japonés principal exactamente (por ejemplo SV5A, SV8A, SV9A, SV1S, M2A, M3) y normalízalo a mayúsculas.
+5.1) REGLA ESPECIAL PARA PROMOS: si en la carta aparece "PROMO 195/SV-P" (o cualquier número seguido de "/SV-P"), es una PROMO JAPONESA: set_code="SV-P", number="195" y language_code="JA". NO la conviertas en SVP.
+5.2) Si aparece "SVP 190", "SVP 195", etc., es una PROMO OCCIDENTAL: set_code="SVP", number="190"/"195". SVP y SV-P son códigos distintos y nunca deben mezclarse.
 6) Si el código principal es nuevo o no está en el catálogo interno, devuélvelo igualmente. El servidor intentará localizar la carta por código+número.
 7) Si el código principal realmente no se puede leer con seguridad, déjalo vacío. No inventes códigos.
 8) expansion DEBE quedar vacío. PokeScan decidirá internamente la expansión occidental correspondiente al código.
@@ -54,12 +56,16 @@ Campos: name, set_code, collector_number, number, expansion, language, language_
       let parsed=null; try{parsed=JSON.parse(text)}catch{try{parsed=JSON.parse(text.replace(/^```json\s*/i,'').replace(/```$/i,'').trim())}catch{}}
       if(!parsed){lastError={message:'Gemini no devolvió JSON válido.'};continue;}
       const number=String(parsed.collector_number||parsed.number||'').trim().replace(/^#/,'').split('/')[0];
-      let setCode=String(parsed.set_code||parsed.expansion_code||parsed.code||'').trim().toUpperCase().replace(/[^A-Z0-9-]/g,'');
+      const rawSetCode=String(parsed.set_code||parsed.expansion_code||parsed.code||'').trim().toUpperCase();
+      const rawPromoText=rawSetCode.replace(/\s+/g,'');
+      let setCode=rawSetCode.replace(/[^A-Z0-9-]/g,'');
+      // No confundir la promo japonesa SV-P con la occidental SVP.
+      if(/^(?:PROMO)?\d+\/SV-P$/.test(rawPromoText) || /^SV-P$/.test(rawPromoText)) setCode='SV-P';
       const langCode=String(parsed.language_code||'').trim().toUpperCase();
-      const isJapanese=langCode==='JA' || /japon|japan/i.test(String(parsed.language||''));
+      const isJapanese=langCode==='JA' || /japon|japan/i.test(String(parsed.language||'')) || setCode==='SV-P';
       const directAliases={"PVL":"PFL"};
       if(!isJapanese && directAliases[setCode]) setCode=directAliases[setCode];
-      const expansion=isJapanese ? getJapaneseExpansion(setCode) : (SET_DB[setCode]||'');
+      const expansion=isJapanese ? (setCode==='SV-P' ? 'Scarlet & Violet Black Star Promos' : getJapaneseExpansion(setCode)) : (SET_DB[setCode]||'');
       // No borramos códigos desconocidos: el motor externo puede descubrir cartas nuevas
       // mediante código+número. La expansión visible se resolverá después de la búsqueda.
       parsed.language_code=isJapanese?'JA':langCode;
