@@ -2787,13 +2787,18 @@ async function resolveGradedCode(){
       const c=await r.json();
       if(c?.name) document.getElementById('gradedName').value=String(c.name).trim();
       if(c?.set?.name){
-        expansion=String(c.set.name).trim();
+        // TCGdex puede devolver el nombre japonés del set. Para PokeScan
+        // mostramos siempre el nombre internacional/occidental del set,
+        // usando el código como identidad cuando existe en nuestra tabla JP.
+        expansion=canonicalExternalExpansion(parsed.code,String(c.set.name).trim());
         populateGradedExpansionOptions(expansion);
       }else if(c?.discoveredExpansion){
-        expansion=String(c.discoveredExpansion).trim();
+        expansion=canonicalExternalExpansion(parsed.code,String(c.discoveredExpansion).trim());
         populateGradedExpansionOptions(expansion);
       }
       if(japaneseCode) document.getElementById('gradedLang').value='Japonés';
+      expansion=canonicalExternalExpansion(parsed.code,expansion);
+      populateGradedExpansionOptions(expansion);
       if(c?.imageUrl||c?.image) gradedImageUrl=String(c.imageUrl||c.image).trim();
       if(!gradedImageUrl && sid){
         const p=new URLSearchParams({code:parsed.code,number:target,lang:preferred,setId:sid});
