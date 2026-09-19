@@ -22,16 +22,17 @@ module.exports = async function handler(req, res) {
     const code = codeImage.match(/^data:([^;]+);base64,(.+)$/);
     const prompt = isCard ? `Identifica esta carta Pokémon y devuelve SOLO JSON válido.
 
-REGLAS ESTRICTAS DE IDIOMA Y EXPANSIÓN:
-1) IMAGEN 1: identifica nombre y el idioma. Si la carta está en japonés o tiene texto japonés, language_code DEBE ser JA.
-2) IMAGEN 2: recorte ampliado de la esquina inferior izquierda. Lee el código de colección y el número.
-3) SI language_code = JA: usa EXCLUSIVAMENTE el catálogo japonés de abajo. No uses códigos occidentales aunque se parezcan. Conserva el código japonés (por ejemplo SV8A, SV9A, SV1S, M2A, M3).
-4) SI language_code != JA: intenta leer literalmente el código occidental impreso. Puede ser un código que PokeScan todavía no conozca. No lo sustituyas por otro código parecido y no lo borres solo porque no aparezca en el catálogo interno.
-5) En cartas japonesas, el código puede estar en minúsculas en la impresión (sv8a); devuélvelo normalizado en mayúsculas (SV8A). También puede ser un código japonés que PokeScan todavía no tenga registrado: consérvalo literalmente si se puede leer.
-6) Usa el número de coleccionista para confirmar el código cuando sea posible.
-7) Si el código realmente no se puede leer con seguridad, déjalo vacío. Pero si puedes distinguir un código nuevo/desconocido, devuélvelo igualmente: el servidor intentará descubrir la expansión mediante fuentes externas.
-8) expansion DEBE ser vacío. PokeScan decide el nombre internamente según el idioma y el código, y si el código es nuevo intentará descubrirlo externamente.
+REGLAS ESTRICTAS DE CÓDIGO Y EXPANSIÓN:
+1) IMAGEN 1: identifica SOLO el nombre de la carta. NO intentes determinar el idioma de la carta y NO devuelvas language_code a partir del texto de la carta. El idioma lo elegirá el usuario manualmente en PokeScan antes de guardar.
+2) IMAGEN 2: recorte ampliado de la esquina inferior izquierda. Lee SOLO el código principal grande de colección y el número de coleccionista.
+3) IMPORTANTE: en códigos como "MEP ES 097", "30C ES 002" o "PFL ES 100", IGNORA las letras pequeñas de idioma (ES, EN, JP, etc.). El código que debes devolver es únicamente MEP, 30C, PFL, etc.
+4) No unas el código principal con las letras pequeñas del idioma. Por ejemplo, "MEP ES 097" debe devolver set_code="MEP" y number="097".
+5) Para códigos japoneses, conserva literalmente el código principal (por ejemplo SV8A, SV9A, SV1S, M2A, M3) y normalízalo a mayúsculas.
+6) Si el código principal es nuevo/desconocido, devuélvelo igualmente. El servidor intentará descubrir la expansión mediante fuentes externas.
+7) Si el código principal realmente no se puede leer con seguridad, déjalo vacío.
+8) expansion DEBE ser vacío. PokeScan decide el nombre internamente según el código y las fuentes externas.
 9) number debe ser solo el número de coleccionista, sin /total.
+10) language y language_code deben quedar vacíos. NO uses el idioma impreso como parte de la identificación.
 
 CATÁLOGO JAPONÉS INTERNO (usar SOLO cuando language_code=JA):
 SV1S: Scarlet ex; SV1V: Violet ex; SV1A: Triplet Beat; SV2P: Snow Hazard; SV2D: Clay Burst; SV2A: Pokémon Card 151; SV3: Ruler of the Black Flame; SV3A: Raging Surf; SV4M: Future Flash; SV4K: Ancient Roar; SV4A: Shiny Treasure ex; SV5K: Wild Force; SV5M: Cyber Judge; SV5A: Crimson Haze; SV6: Mask of Change; SV6A: Night Wanderer; SV7: Stellar Miracle; SV7A: Paradise Dragona; SV8: Super Electric Breaker; SV8A: Terastal Festival ex; SV9: Battle Partners; SV9A: Heat Wave Arena; SV10: The Glory of Team Rocket; SV11B: Black Bolt; SV11W: White Flare; M1L: Mega Brave; M1S: Mega Symphonia; M2: Inferno X; M2A: Mega Dream ex; M3: Nihil Zero; M4: Ninja Spinner; M5: Abyss Eye; M6: Storm Emeralda; S1W: Shield; S1H: Sword; S2: Rebel Clash; S3: Infinity Zone; S3A: Legendary Heartbeat; S4: Amazing Volt Tackle; S4A: Shiny Star V; S5I: Ichigeki Master; S5R: Rapid Strike Master; S6H: Silver Lance; S6K: Jet Black Spirit; S6A: Matchless Fighter; S7D: Skyscraping Perfection; S7R: Blue Sky Stream; S7A: Eevee Heroes; S8: Fusion Arts; S8A: 25th Anniversary Collection; S8B: VMAX Climax; S9: Star Birth; S9A: Battle Region; S10D: Time Gazer; S10P: Space Juggler; S10A: Dark Phantasma; S11: Lost Abyss; S11A: Incandescent Arcana; S12: Paradigm Trigger; S12A: VSTAR Universe; SM1S: Collection Sun; SM1M: Collection Moon; SM2L: Alolan Moonlight; SM2K: Alolan Kokoro; SM3H: Hibana; SM3N: A Clash of the Sky and Sea; SM4S: Awakened Heroes; SM4A: Crack Shot; SM5S: Ultra Sun; SM5M: Ultra Moon; SM6S: Forbidden Light; SM6B: Forbidden Light; SM7: Thunderclap Spark; SM8: Super Burst Impact; SM8B: Dark Order; SM9: Tag Bolt; SM9A: Night Unison; SM10: Double Blaze; SM10A: GG End; SM11: Miracle Twin; SM11B: Dream League; SM12: Alter Genesis; SM12A: Tag All Stars; XY1: Collection X / Collection Y; XY2: Wild Blaze; XY3: Rising Fist; XY4: Phantom Gate; XY5: Gaia Volcano / Tidal Storm; XY6: Emerald Break; XY7: Bandit Ring; XY8: Red Flash / Blue Impact; XY9: Rage of the Broken Sky; XY10: The Best of XY; XY11: Cruel Traitor / Explosive Fighter; XY12: 20th Anniversary Festa; BW1: Black Collection / White Collection; BW2: Red Collection; BW3: Psycho Drive / Hail Blizzard; BW4: Dark Rush; BW5: Dragon Blade / Dragon Blast; BW6: Freeze Bolt / Cold Flare; BW7: Plasma Gale; BW8: Spiral Force / Thunder Knuckle; BW9: Megalo Cannon; BW10: EX Battle Boost; MP1: Start Deck 100 Battle Collection; M-P: Promotional Cards; SVP: Scarlet & Violet Black Star Promos; M-PRO: Mega Evolution Promotional Cards
@@ -54,11 +55,12 @@ Campos: name, set_code, collector_number, number, expansion, language, language_
       if(!parsed){lastError={message:'Gemini no devolvió JSON válido.'};continue;}
       const number=String(parsed.collector_number||parsed.number||'').trim().replace(/^#/,'').split('/')[0];
       let setCode=String(parsed.set_code||parsed.expansion_code||parsed.code||'').trim().toUpperCase().replace(/[^A-Z0-9-]/g,'');
-      const langCode=String(parsed.language_code||'').trim().toUpperCase();
-      const isJapanese=langCode==='JA' || /japon|japan/i.test(String(parsed.language||''));
+      // El idioma NO lo decide Gemini en el escáner. Lo selecciona el usuario en PokeScan.
+      const langCode='';
+      const isJapanese=false;
       const directAliases={"PVL":"PFL"};
       if(!isJapanese && directAliases[setCode]) setCode=directAliases[setCode];
-      const expansion=isJapanese ? getJapaneseExpansion(setCode) : (SET_DB[setCode]||'');
+      const expansion=SET_DB[setCode]||getJapaneseExpansion(setCode)||'';
       // El catálogo interno solo aporta el nombre de la expansión cuando la conoce.
       // MUY IMPORTANTE: no borramos un código nuevo/desconocido. El escáner debe
       // poder pasarlo al motor externo (TCGdex/Limitless) para descubrir la expansión.
