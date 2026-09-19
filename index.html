@@ -949,68 +949,65 @@ function promoParentExpansion(code,number,apiExpansion){
 
 async function enrichCardFromTCGdex(x){
   try{
-    const code=String(x?.set_code||x?.expansion_code||x?.code||'').trim().toUpperCase();
+    const code=normalizeSetCode(x?.set_code||x?.expansion_code||x?.code||'');
     const rawNum=String(x?.collector_number||x?.number||'').trim().split('/')[0];
     const num=code==='30C' ? rawNum.padStart(3,'0') : (rawNum.replace(/^0+/,'')||rawNum);
     if(!code || !num) return x;
 
-    const lc=String(x?.language_code||'').toUpperCase();
-    const langs=lc==='JA'?['ja','en']:(lc==='ES'?['es','en']:['en','es']);
+    const langCode=String(x?.language_code||'').toUpperCase();
+    const preferred=langCode==='JA'?'ja':(langCode==='ES'?'es':'en');
+    const langs=langCode==='JA'?['ja','en','es']:[preferred,preferred==='es'?'en':'es'];
 
-    // Usamos exactamente el mismo motor externo que el modo manual:
-    // código + número -> TCGdex -> descubrimiento dinámico -> Limitless.
-    // Así la cámara y el manual resuelven las expansiones de la misma forma.
+    // IMPORTANTE: la cámara debe usar exactamente el mismo motor que el modo manual.
+    // No buscamos primero por nombre, porque Gemini puede reconocer el nombre pero
+    // dejar vacío el nombre de la expansión. El código+número son la identidad fiable.
     try{
+      const target=code==='30C'?String(rawNum).padStart(3,'0'):(String(rawNum).replace(/^0+/,'')||String(rawNum));
       const r=await fetch('/api/card-lookup',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          code,
-          number:num,
-          localId:num,
-          langs
-        })
+        body:JSON.stringify({code,number:target,localId:target,langs})
       });
       if(r.ok){
         const hit=await r.json();
         if(hit?.name){
           x.name=String(hit.name).trim()||x.name;
-          const setName=String(hit?.set?.name||'').trim();
-          if(setName) x.expansion=setName;
-          const setId=String(hit?.set?.id||'').trim();
-          if(setId) x.setId=setId;
+          if(hit?.set?.name) x.expansion=String(hit.set.name).trim();
+          if(hit?.set?.id && !x.set_code) x.set_code=String(hit.set.id).trim().toUpperCase();
           const cmId=hit?.pricing?.cardmarket?.idProduct||hit?.thirdParty?.cardmarket||hit?.cardmarketProductId||'';
-          if(cmId) x.cardmarketProductId=String(cmId);
-          if(hit?.cardmarketNameEnglish) x.cardmarketNameEnglish=String(hit.cardmarketNameEnglish).trim();
-          if(hit?.imageUrl) x.imageUrl=String(hit.imageUrl).trim();
-          else if(hit?.image) x.imageUrl=String(hit.image).trim();
-          if(hit?.sourceUrl) x.sourceUrl=String(hit.sourceUrl).trim();
-          if(lc==='JA'){x.language_code='JA';x.lang='Japonés';}
+          if(cmId)x.cardmarketProductId=String(cmId);
+          if(hit.imageUrl||hit.image) x.imageUrl=String(hit.imageUrl||hit.image).trim();
+          if(hit.cardmarketNameEnglish)x.cardmarketNameEnglish=String(hit.cardmarketNameEnglish).trim();
+          x.source=String(hit.source||x.source||'').trim();
+          x.sourceUrl=String(hit.sourceUrl||x.sourceUrl||'').trim();
+          if(langCode==='JA'){x.language_code='JA';x.lang='Japonés';}
+          const total=Number(hit?.set?.cardCount?.total||0)||0;
+          if(total && !String(x.number||'').includes('/')) x.number=String(rawNum).replace(/^0+/,'')+'/'+total;
           return x;
         }
       }
-    }catch(e){}
+    }catch(e){ console.warn('Enriquecimiento por código:',e); }
 
-    // Respaldo directo para cartas antiguas si el motor externo no responde.
-    const lang=lc==='ES'?'es':'en';
+    // Respaldo para cartas antiguas/compatibilidad: búsqueda por nombre en TCGdex.
     const name=String(x?.name||'').trim();
     if(!name) return x;
-    const url='https://api.tcgdex.net/v2/'+lang+'/cards?name='+encodeURIComponent('eq:'+name);
-    const r=await fetch(url,{cache:'no-store'});
+    const url='https://api.tcgdex.net/v2/'+preferred+'/cards?name='+encodeURIComponent('eq:'+name);
+    const r=await fetch(url,{cache:'force-cache'});
     if(!r.ok)return x;
     const cards=await r.json();
     if(!Array.isArray(cards))return x;
-    const hit=cards.find(c=>String(c.localId||'').replace(/^0+/,'')===String(num).replace(/^0+/,''));
+    const promo=/^(MEP|SVP)$/.test(code);
+    let hit=cards.find(c=>String(c.localId||'').replace(/^0+/,'')===num && (promo ? /black star promos/i.test(String(c.set?.name||'')) : true));
+    if(!hit && promo) hit=cards.find(c=>String(c.localId||'').replace(/^0+/,'')===num);
     if(!hit)return x;
-    const setName=String(hit?.set?.name||'').trim();
-    if(setName)x.expansion=setName;
-    const cmId=hit?.pricing?.cardmarket?.idProduct||hit?.thirdParty?.cardmarket||'';
-    if(cmId)x.cardmarketProductId=String(cmId);
-    if(hit.image && !x.imageUrl)x.imageUrl=String(hit.image).replace(/\/$/,'')+'/high.webp';
+    const cmId=hit?.pricing?.cardmarket?.idProduct || hit?.thirdParty?.cardmarket || hit?.cardmarketProductId || '';
+    if(cmId) x.cardmarketProductId=String(cmId);
+    if(hit.image) x.imageUrl=String(hit.image).replace(/\/$/,'')+'/high.webp';
+    const setName=String(hit.set?.name||'').trim();
+    if(setName && promo && !/promo|black star/i.test(setName)) x.expansion=setName;
     return x;
   }catch(e){return x;}
 }
-
 function fillRecognition(x){
   x=x||{};
   const rawCode=x.set_code||x.expansion_code||x.code||'';
