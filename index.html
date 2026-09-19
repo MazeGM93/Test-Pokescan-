@@ -559,7 +559,25 @@ async function recognizeCurrentFrame(){
     const j=await r.json();
     if(!r.ok) throw new Error(j.error||'No se pudo reconocer la carta');
     if(requestSession!==scanSession) return;
-    fillRecognition(j);
+
+    // Gemini SOLO lee la identidad impresa (idioma + código + número).
+    // A partir de aquí reutilizamos EXACTAMENTE el mismo motor que funciona
+    // en la búsqueda manual. No duplicamos ni sustituimos su lógica.
+    const detectedLangCode=String(j?.language_code||'').trim().toUpperCase();
+    const detectedLang=(detectedLangCode==='JA'||/japon|japan/i.test(String(j?.language||'')))?'Japonés':
+      detectedLangCode==='ES'?'Español':detectedLangCode==='FR'?'Francés':detectedLangCode==='DE'?'Alemán':
+      detectedLangCode==='IT'?'Italiano':detectedLangCode==='PT'?'Portugués':detectedLangCode==='KO'?'Coreano':'Inglés';
+    const detectedCode=String(j?.set_code||j?.expansion_code||j?.code||'').trim().toUpperCase();
+    const detectedNumber=String(j?.collector_number||j?.number||'').trim().split('/')[0];
+    if(!detectedCode || !detectedNumber) throw new Error('No se pudo leer con seguridad el código y número de la carta.');
+
+    const langSel=document.getElementById('lang');
+    if(langSel) langSel.value=detectedLang;
+    const manualInput=document.getElementById('manualCardCode');
+    if(!manualInput) throw new Error('No se encontró el buscador manual de cartas.');
+    manualInput.value=detectedCode+' '+detectedNumber;
+    document.getElementById('scanStatus').textContent=detectedCode+' '+detectedNumber+' — usando búsqueda externa…';
+    await applyManualCardCode('manualCardCode');
   }catch(e){
     if(e && e.name==='AbortError') return;
     if(requestSession!==scanSession) return;
