@@ -735,89 +735,11 @@ async function applyManualCardCode(inputId){
   setSaveEnabled(false);
 
   if(currentKind==='card' || currentKind==='graded'){
+    // El modo manual usa exactamente el mismo motor de enriquecimiento que la cámara.
+    // No añadimos cartas nuevas a mano: código+número -> fuentes externas -> nombre/expansión/imagen/Cardmarket.
     try{
-      const knownMeta=promoMeta(parsed.code,parsed.number);
-      if(knownMeta?.[0]){
-        x.name=knownMeta[0];
-        if(!x.expansion && knownMeta[1]) x.expansion=knownMeta[1];
-      }
-      const sid=(typeof CARD_IMAGE_SET_IDS!=='undefined'&&CARD_IMAGE_SET_IDS[parsed.code])?CARD_IMAGE_SET_IDS[parsed.code]:(japaneseCode?parsed.code.toLowerCase():'');
-      const selectedLang=document.getElementById('lang')?.value||selectedManualLang;
-      const preferred=selectedLang==='Español'?'es':(selectedLang==='Japonés'?'ja':selectedLang==='Francés'?'fr':selectedLang==='Alemán'?'de':selectedLang==='Italiano'?'it':selectedLang==='Portugués'?'pt':selectedLang==='Coreano'?'ko':'en');
-      const langs=preferred==='ja'?['ja','en','es']:[preferred,preferred==='es'?'en':'es'];
-      const parsedNum=String(parsed.number).split('/')[0].trim();
-      const target=parsed.code==='30C' ? parsedNum.padStart(3,'0') : (parsedNum.replace(/^0+/,'')||parsedNum);
-      let hit=null;
-
-      // El servidor intenta primero TCGdex y, si no existe, Limitless.
-      const serverResp=await fetch('/api/card-lookup',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({setId:sid,localId:target,code:parsed.code,number:target,langs})
-      });
-      if(serverResp.ok){
-        const serverCard=await serverResp.json();
-        if(serverCard?.name){
-          hit=serverCard;
-          x.name=String(serverCard.name).trim();
-          if(serverCard?.set?.name)x.expansion=String(serverCard.set.name).trim();
-          if(japaneseCode){x.language_code='JA';x.lang='Japonés';}
-          const cmId=serverCard?.pricing?.cardmarket?.idProduct||serverCard?.thirdParty?.cardmarket||serverCard?.cardmarketProductId||'';
-          if(cmId)x.cardmarketProductId=String(cmId);
-          x.source=String(serverCard.source||'').trim();
-          x.sourceUrl=String(serverCard.sourceUrl||'').trim();
-          x.cardmarketNameEnglish=String(serverCard.cardmarketNameEnglish||'').trim();
-          x.cardmarketExactUrl=String(serverCard.cardmarketExactUrl||'').trim();
-          x.lang=selectedLang;
-          x.language_code=selectedLang==='Japonés'?'JA':(Object.entries(langMap).find(([,v])=>v===selectedLang)?.[0]||'');
-
-          // Una carta externa entra por el mismo contrato de imagen que una carta normal.
-          // Si TCGdex conoce la carta, card-image recuperará su imagen exacta por setId+número.
-          // Si todavía no la conoce, usa la imagen de la fuente externa exacta.
-          // Guardamos la URL REAL que devolvió la fuente. El proxy queda como
-          // respaldo, pero ya no es la imagen que se persiste en la colección.
-          if(serverCard.imageUrl || serverCard.image) x.imageUrl=String(serverCard.imageUrl||serverCard.image).trim();
-          if(!x.imageUrl){
-            const imgParams=new URLSearchParams();
-            if(sid)imgParams.set('setId',sid);
-            imgParams.set('code',parsed.code);
-            imgParams.set('number',target);
-            imgParams.set('lang',preferred);
-            if(serverCard.sourceUrl)imgParams.set('sourceUrl',serverCard.sourceUrl);
-            x.imageUrl='/api/card-image?'+imgParams.toString();
-          }
-        }
-      }
-
-      // Si el servidor no encontró la carta, hacemos una última comprobación directa de TCGdex
-      // solo cuando tenemos un setId conocido. Esto conserva la compatibilidad de cartas antiguas.
-      if(!hit && sid){
-        for(const lg of langs){
-          try{
-            const r=await fetch('https://api.tcgdex.net/v2/'+lg+'/sets/'+encodeURIComponent(sid)+'/'+encodeURIComponent(target),{cache:'no-store'});
-            if(!r.ok)continue;
-            const h=await r.json();
-            if(h&&(h.name||h.localId)){hit=h;break;}
-          }catch(e){}
-        }
-      }
-      if(hit){
-        x.name=String(hit.name||x.name||'').trim();
-        if(hit?.set?.name)x.expansion=String(hit.set.name).trim();
-        if(japaneseCode){x.language_code='JA';x.lang='Japonés';}
-        const cmId=hit?.pricing?.cardmarket?.idProduct||hit?.thirdParty?.cardmarket||hit?.cardmarketProductId||'';
-        if(cmId)x.cardmarketProductId=String(cmId);
-        if(hit?.cardmarketNameEnglish)x.cardmarketNameEnglish=String(hit.cardmarketNameEnglish).trim();
-        if(hit?.cardmarketExactUrl)x.cardmarketExactUrl=String(hit.cardmarketExactUrl).trim();
-        if(hit.image && !x.imageUrl) x.imageUrl=String(hit.image).trim();
-        if(!x.imageUrl){
-          const p=new URLSearchParams({code:parsed.code,number:target,lang:preferred});
-          if(sid)p.set('setId',sid);
-          x.imageUrl='/api/card-image?'+p.toString();
-        }
-        const total=Number(hit?.set?.cardCount?.total||0)||0;
-        if(total && !String(parsed.number).includes('/'))x.number=String(parsed.number).replace(/^0+/,'')+'/'+total;
-      }
-    }catch(e){ console.warn('Resolución manual:',e); }
+      x = await enrichCardFromTCGdex(x);
+    }catch(e){ console.warn('Resolución manual con el motor de cámara:', e); }
   }
 
   x.set_code=String(parsed.code).trim().toUpperCase();
