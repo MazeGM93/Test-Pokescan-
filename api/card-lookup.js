@@ -21,15 +21,29 @@ async function findCardmarketExact(code, number, preferredLang='en') {
         try{absolute=new URL(href,'https://www.cardmarket.com').toString();}catch(e){continue;}
         const path=decodeURIComponent(new URL(absolute).pathname);
         const tail=path.split('/').pop()||'';
-        const compact=tail.replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+        const compactPath=path.replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+        const compactTail=tail.replace(/[^A-Za-z0-9]/g,'').toUpperCase();
         const wantedCandidates=numCandidates.map(n=>(cleanCode+n).replace(/[^A-Za-z0-9]/g,'').toUpperCase());
-        const matchedMarker=wantedCandidates.find(w=>compact.endsWith(w));
+        // Cardmarket no mantiene siempre exactamente el mismo separador:
+        // MEP097, MEP-097, MEP_097, etc. Buscamos el identificador en toda
+        // la ruta y no dependemos de que sea exactamente el final del slug.
+        const matchedMarker=wantedCandidates.find(w=>compactTail.includes(w)||compactPath.includes(w));
         if(!matchedMarker) continue;
         const parts=path.split('/').filter(Boolean);
         const setSlug=parts.length>=2?parts[parts.length-2]:'';
         const marker=matchedMarker;
-        const markerRe=new RegExp('[-_]?'+marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$','i');
+        const markerRe=new RegExp('[-_]?'+marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?:$|[-_])','i');
         let cardSlug=tail.replace(markerRe,'').replace(/[-_]+$/,'');
+        // Si el slug contiene el marcador pero no está al final, recortamos desde
+        // el primer marcador para conservar únicamente el nombre de la carta.
+        if(cardSlug===tail){
+          const compactMarkerIndex=tail.replace(/[^A-Za-z0-9]/g,'').toUpperCase().indexOf(marker);
+          if(compactMarkerIndex>=0){
+            const rawCompact=tail.replace(/[^A-Za-z0-9]/g,'');
+            const prefix=rawCompact.slice(0,compactMarkerIndex);
+            if(prefix) cardSlug=prefix;
+          }
+        }
         let name=decodeURIComponent(cardSlug).replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
         if(name) name=name.replace(/\bEx\b/g,'ex');
         const setName=decodeURIComponent(setSlug).replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
