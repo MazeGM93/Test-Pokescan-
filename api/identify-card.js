@@ -26,11 +26,11 @@ REGLAS ESTRICTAS DE IDIOMA Y EXPANSIÓN:
 1) IMAGEN 1: identifica nombre y el idioma. Si la carta está en japonés o tiene texto japonés, language_code DEBE ser JA.
 2) IMAGEN 2: recorte ampliado de la esquina inferior izquierda. Lee el código de colección y el número.
 3) SI language_code = JA: usa EXCLUSIVAMENTE el catálogo japonés de abajo. No uses códigos occidentales aunque se parezcan. Conserva el código japonés (por ejemplo SV8A, SV9A, SV1S, M2A, M3).
-4) SI language_code != JA: usa EXCLUSIVAMENTE el catálogo occidental que ya conoce PokeScan. No conviertas una carta occidental a un código japonés.
-5) En cartas japonesas, el código puede estar en minúsculas en la impresión (sv8a); devuélvelo normalizado en mayúsculas (SV8A).
-6) En cartas japonesas, usa el número de coleccionista para confirmar el código.
-7) Si el código no se ve con seguridad, déjalo vacío. No inventes códigos.
-8) expansion DEBE ser vacío. PokeScan decide el nombre internamente según el idioma y el código.
+4) SI language_code != JA: intenta leer literalmente el código occidental impreso. Puede ser un código que PokeScan todavía no conozca. No lo sustituyas por otro código parecido y no lo borres solo porque no aparezca en el catálogo interno.
+5) En cartas japonesas, el código puede estar en minúsculas en la impresión (sv8a); devuélvelo normalizado en mayúsculas (SV8A). También puede ser un código japonés que PokeScan todavía no tenga registrado: consérvalo literalmente si se puede leer.
+6) Usa el número de coleccionista para confirmar el código cuando sea posible.
+7) Si el código realmente no se puede leer con seguridad, déjalo vacío. Pero si puedes distinguir un código nuevo/desconocido, devuélvelo igualmente: el servidor intentará descubrir la expansión mediante fuentes externas.
+8) expansion DEBE ser vacío. PokeScan decide el nombre internamente según el idioma y el código, y si el código es nuevo intentará descubrirlo externamente.
 9) number debe ser solo el número de coleccionista, sin /total.
 
 CATÁLOGO JAPONÉS INTERNO (usar SOLO cuando language_code=JA):
@@ -59,8 +59,10 @@ Campos: name, set_code, collector_number, number, expansion, language, language_
       const directAliases={"PVL":"PFL"};
       if(!isJapanese && directAliases[setCode]) setCode=directAliases[setCode];
       const expansion=isJapanese ? getJapaneseExpansion(setCode) : (SET_DB[setCode]||'');
-      // Never invent an expansion. Each language is validated only against its own catalog.
-      if(!expansion) setCode='';
+      // El catálogo interno solo aporta el nombre de la expansión cuando la conoce.
+      // MUY IMPORTANTE: no borramos un código nuevo/desconocido. El escáner debe
+      // poder pasarlo al motor externo (TCGdex/Limitless) para descubrir la expansión.
+      // Solo se descarta el código si Gemini realmente no devolvió ninguno.
       parsed.language_code=isJapanese?'JA':langCode;
       parsed.collector_number=number; parsed.number=number; parsed.set_code=setCode; parsed.expansion=expansion; parsed.kind=currentKind;
       parsed.cardmarket_language_id=({ES:4,EN:1,FR:2,DE:3,IT:5,JA:7,PT:8,KO:10}[String(parsed.language_code||'').toUpperCase()]||null);

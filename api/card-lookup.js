@@ -37,12 +37,40 @@ module.exports = async function handler(req, res) {
       return '';
     };
 
+    // 0) Descubrimiento dinámico del set: si PokeScan todavía no conoce el código,
+    // intentamos localizarlo en el listado de TCGdex antes de caer en Limitless.
+    // Esto es especialmente importante para expansiones japonesas nuevas (SVxx, Mxx, etc.).
+    let discoveredSetId=setId;
+    let discoveredSetName='';
+    if(!discoveredSetId && code){
+      const discoveryLangs=[...new Set(uniqueLangs.map(x=>String(x).toLowerCase()).concat(['ja','en','es']))];
+      for(const lang of discoveryLangs){
+        try{
+          const sr=await fetch(`https://api.tcgdex.net/v2/${encodeURIComponent(lang)}/sets`,{headers:{Accept:'application/json'},cache:'no-store'});
+          if(!sr.ok) continue;
+          const sets=await sr.json();
+          if(!Array.isArray(sets)) continue;
+          const targetCode=code.replace(/[^A-Z0-9]/g,'').toUpperCase();
+          const found=sets.find(s=>{
+            const sid=String(s?.id||'').replace(/[^A-Z0-9]/g,'').toUpperCase();
+            const sc=String(s?.code||s?.setCode||'').replace(/[^A-Z0-9]/g,'').toUpperCase();
+            return sid===targetCode || sc===targetCode;
+          });
+          if(found?.id){
+            discoveredSetId=String(found.id).trim();
+            discoveredSetName=strip(found.name||found.officialName||'');
+            break;
+          }
+        }catch(e){}
+      }
+    }
+
     // 1) TCGdex: fuente principal. Si responde, devolvemos también su imagen.
-    if(setId){
+    if(discoveredSetId){
       for(const lang of uniqueLangs){
         const urls=[
-          `https://api.tcgdex.net/v2/${encodeURIComponent(lang)}/sets/${encodeURIComponent(setId)}/${encodeURIComponent(cleanNum)}`,
-          `https://api.tcgdex.net/v2/${encodeURIComponent(lang)}/cards/${encodeURIComponent(setId+'-'+cleanNum)}`
+          `https://api.tcgdex.net/v2/${encodeURIComponent(lang)}/sets/${encodeURIComponent(discoveredSetId)}/${encodeURIComponent(cleanNum)}`,
+          `https://api.tcgdex.net/v2/${encodeURIComponent(lang)}/cards/${encodeURIComponent(discoveredSetId+'-'+cleanNum)}`
         ];
         for(const url of urls){
           try{
@@ -57,7 +85,7 @@ module.exports = async function handler(req, res) {
               // inglés para construir slugs exactos de Cardmarket cuando sea posible.
               if(String(lang).toLowerCase()!=='en'){
                 try{
-                  const enUrl=`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(setId+'-'+cleanNum)}`;
+                  const enUrl=`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(discoveredSetId+'-'+cleanNum)}`;
                   const er=await fetch(enUrl,{headers:{Accept:'application/json'},cache:'no-store'});
                   if(er.ok){const ec=await er.json();if(ec&&String(ec.name||'').trim())englishName=String(ec.name).trim();}
                 }catch(e){}
