@@ -588,6 +588,11 @@ function cardmarketProductUrl(productId, x){
   if(!/^\d+$/.test(id)) return '';
   return 'https://www.cardmarket.com/es/Pokemon/Products?idProduct='+encodeURIComponent(id)+'&language='+cardmarketLanguageIdFor(x);
 }
+function cardmarketWithLanguage(url,x){
+  const u=String(url||'').trim();
+  if(!u || !isCardmarketUrl(u)) return '';
+  try{const z=new URL(u); z.searchParams.set('language',String(cardmarketLanguageIdFor(x))); return z.toString();}catch(e){return u;}
+}
 function buildCardmarketExactUrl(x){
   const kind=x.kind||currentKind;
   if(kind!=='card' && kind!=='graded') return '';
@@ -610,13 +615,18 @@ function buildCardmarketExactUrl(x){
     }
   }
 
+  // Si una fuente externa ya encontró la ficha individual de Cardmarket, úsala.
+  const sourceExact=cardmarketWithLanguage(x.cardmarketExactUrl||'',x);
+  if(sourceExact) return sourceExact;
+
   // Para el resto de cartas, si TCGdex nos entrega idProduct lo conservamos como respaldo.
   const byId=cardmarketProductUrl(x.cardmarketProductId||x?.pricing?.cardmarket?.idProduct,x);
   if(byId) return byId;
 
   if(/^MEP$|^SVP$/i.test(code)){
     const promoSet=code==='MEP'?'MEP-Black-Star-Promos':'SV-Black-Star-Promos';
-    return 'https://www.cardmarket.com/es/Pokemon/Products/Singles/'+promoSet+'/'+cardmarketSlug(name)+'-'+code+number;
+    const canonicalName=String(x.cardmarketNameEnglish||name||'').trim();
+    if(canonicalName) return 'https://www.cardmarket.com/en/Pokemon/Products/Singles/'+promoSet+'/'+cardmarketSlug(canonicalName)+'-'+code+number+'?language='+cardmarketLanguageIdFor(x);
   }
 
   if(/^TG\d+$/i.test(number)){
@@ -679,14 +689,21 @@ function getCardmarketUrl(x){
   return buildCardmarketSearchUrl(inferred);
 }
 function parseManualCardCode(raw){
-  const s=String(raw||'').trim().toUpperCase().replace(/[#·]/g,' ').replace(/\s+/g,' ');
+  const s=String(raw||'').trim().toUpperCase().replace(/[#·]/g,' ').replace(/[\-_–—]+/g,' ').replace(/\s+/g,' ');
   if(!s)return null;
-  const parts=s.split(' ');
+  const parts=s.split(' ').filter(Boolean);
   if(parts.length<2)return null;
   const code=String(parts.shift()||'').trim();
+  let languageCode='';
+  const langAliases={ES:'ES',EN:'EN',JA:'JA',JP:'JA',KO:'KO',KR:'KO',FR:'FR',DE:'DE',IT:'IT',PT:'PT'};
+  if(parts.length>=2 && langAliases[parts[0]]) languageCode=langAliases[parts.shift()];
+  else if(parts.length===1){
+    const m=String(parts[0]).match(/^([A-Z]{2})(\d{1,4}(?:\/\d{1,4})?)$/);
+    if(m && langAliases[m[1]]){languageCode=langAliases[m[1]];parts[0]=m[2];}
+  }
   const number=parts.join('').trim();
   if(!code||!number)return null;
-  return {code,number};
+  return {code,number,languageCode};
 }
 
 async function applyManualCardCode(inputId){
@@ -699,12 +716,13 @@ async function applyManualCardCode(inputId){
   }
   // El código introducido manualmente es la identidad principal de la carta.
   // No heredamos nombre, imagen ni expansión de una búsqueda anterior.
-  const japaneseCode=isJapaneseSetCode(parsed.code);
-  if(japaneseCode){
-    const langSel=document.getElementById('lang');
-    if(langSel) langSel.value='Japonés';
-  }
-  const x={kind:currentKind,set_code:parsed.code,expansion_code:parsed.code,collector_number:parsed.number,number:parsed.number,name:'',imageUrl:'',cardmarketProductId:'',source:'',sourceUrl:'',language_code:japaneseCode?'JA':''};
+  const japaneseCode=isJapaneseSetCode(parsed.code) || parsed.languageCode==='JA';
+  const langMap={ES:'Español',EN:'Inglés',JA:'Japonés',FR:'Francés',DE:'Alemán',IT:'Italiano',PT:'Portugués',KO:'Coreano'};
+  const langSel=document.getElementById('lang');
+  if(parsed.languageCode && langSel && langMap[parsed.languageCode]) langSel.value=langMap[parsed.languageCode];
+  else if(japaneseCode && langSel) langSel.value='Japonés';
+  const selectedManualLang=langSel?.value||'Español';
+  const x={kind:currentKind,set_code:parsed.code,expansion_code:parsed.code,collector_number:parsed.number,number:parsed.number,name:'',imageUrl:'',cardmarketProductId:'',cardmarketExactUrl:'',source:'',sourceUrl:'',language_code:selectedManualLang==='Japonés'?'JA':(Object.entries(langMap).find(([,v])=>v===selectedManualLang)?.[0]||''),lang:selectedManualLang};
   const exp=canonicalExternalExpansion(parsed.code,expansionFromCollector(parsed.code,parsed.number));
   if(exp)x.expansion=exp;
   window.lastRecognition=x;
@@ -724,8 +742,9 @@ async function applyManualCardCode(inputId){
         if(!x.expansion && knownMeta[1]) x.expansion=knownMeta[1];
       }
       const sid=(typeof CARD_IMAGE_SET_IDS!=='undefined'&&CARD_IMAGE_SET_IDS[parsed.code])?CARD_IMAGE_SET_IDS[parsed.code]:(japaneseCode?parsed.code.toLowerCase():'');
-      const preferred=japaneseCode?'ja':((document.getElementById('lang')?.value==='Español')?'es':'en');
-      const langs=japaneseCode?['ja','en','es']:[preferred,preferred==='es'?'en':'es'];
+      const selectedLang=document.getElementById('lang')?.value||selectedManualLang;
+      const preferred=selectedLang==='Español'?'es':(selectedLang==='Japonés'?'ja':selectedLang==='Francés'?'fr':selectedLang==='Alemán'?'de':selectedLang==='Italiano'?'it':selectedLang==='Portugués'?'pt':selectedLang==='Coreano'?'ko':'en');
+      const langs=preferred==='ja'?['ja','en','es']:[preferred,preferred==='es'?'en':'es'];
       const parsedNum=String(parsed.number).split('/')[0].trim();
       const target=parsed.code==='30C' ? parsedNum.padStart(3,'0') : (parsedNum.replace(/^0+/,'')||parsedNum);
       let hit=null;
@@ -747,6 +766,9 @@ async function applyManualCardCode(inputId){
           x.source=String(serverCard.source||'').trim();
           x.sourceUrl=String(serverCard.sourceUrl||'').trim();
           x.cardmarketNameEnglish=String(serverCard.cardmarketNameEnglish||'').trim();
+          x.cardmarketExactUrl=String(serverCard.cardmarketExactUrl||'').trim();
+          x.lang=selectedLang;
+          x.language_code=selectedLang==='Japonés'?'JA':(Object.entries(langMap).find(([,v])=>v===selectedLang)?.[0]||'');
 
           // Una carta externa entra por el mismo contrato de imagen que una carta normal.
           // Si TCGdex conoce la carta, card-image recuperará su imagen exacta por setId+número.
@@ -785,6 +807,7 @@ async function applyManualCardCode(inputId){
         const cmId=hit?.pricing?.cardmarket?.idProduct||hit?.thirdParty?.cardmarket||hit?.cardmarketProductId||'';
         if(cmId)x.cardmarketProductId=String(cmId);
         if(hit?.cardmarketNameEnglish)x.cardmarketNameEnglish=String(hit.cardmarketNameEnglish).trim();
+        if(hit?.cardmarketExactUrl)x.cardmarketExactUrl=String(hit.cardmarketExactUrl).trim();
         if(hit.image && !x.imageUrl) x.imageUrl=String(hit.image).trim();
         if(!x.imageUrl){
           const p=new URLSearchParams({code:parsed.code,number:target,lang:preferred});
@@ -934,7 +957,7 @@ function promoParentExpansion(code,number,apiExpansion){
     022:'Llamas Fantasmales',023:'Llamas Fantasmales',024:'Llamas Fantasmales',026:'Llamas Fantasmales',027:'Llamas Fantasmales',
     029:'Llamas Fantasmales',030:'Héroes Ascendentes',031:'Héroes Ascendentes',032:'Héroes Ascendentes',
     033:'Héroes Ascendentes',034:'Héroes Ascendentes',035:'Héroes Ascendentes',036:'Héroes Ascendentes',
-    070:'Equilibrio Perfecto',080:'Chaos Rising',088:'Pitch Black'
+    070:'Equilibrio Perfecto',080:'Chaos Rising',088:'Pitch Black',097:'30th Celebration'
   };
   if(c==='MEP' && mep[n]) return mep[n];
   const svp={
@@ -954,9 +977,12 @@ async function enrichCardFromTCGdex(x){
     const num=code==='30C' ? rawNum.padStart(3,'0') : (rawNum.replace(/^0+/,'')||rawNum);
     if(!code || !num) return x;
 
-    const langCode=String(x?.language_code||'').toUpperCase();
-    const preferred=langCode==='JA'?'ja':(langCode==='ES'?'es':'en');
-    const langs=langCode==='JA'?['ja','en','es']:[preferred,preferred==='es'?'en':'es'];
+    // El idioma del escáner lo controla el selector manual. Gemini no decide el idioma.
+    const selectedLang=document.getElementById('lang')?.value||x?.lang||'Español';
+    const langCode=selectedLang==='Japonés'?'JA':(selectedLang==='Español'?'ES':selectedLang==='Francés'?'FR':selectedLang==='Alemán'?'DE':selectedLang==='Italiano'?'IT':selectedLang==='Portugués'?'PT':selectedLang==='Coreano'?'KO':'EN');
+    const preferred=langCode==='JA'?'ja':langCode==='ES'?'es':langCode==='FR'?'fr':langCode==='DE'?'de':langCode==='IT'?'it':langCode==='PT'?'pt':langCode==='KO'?'ko':'en';
+    const japaneseCode=isJapaneseSetCode(code);
+    const langs=japaneseCode?['ja',preferred,'en','es']:[preferred,preferred==='es'?'en':'es'];
 
     // IMPORTANTE: la cámara debe usar exactamente el mismo motor que el modo manual.
     // No buscamos primero por nombre, porque Gemini puede reconocer el nombre pero
@@ -980,7 +1006,7 @@ async function enrichCardFromTCGdex(x){
           if(hit.cardmarketNameEnglish)x.cardmarketNameEnglish=String(hit.cardmarketNameEnglish).trim();
           x.source=String(hit.source||x.source||'').trim();
           x.sourceUrl=String(hit.sourceUrl||x.sourceUrl||'').trim();
-          if(langCode==='JA'){x.language_code='JA';x.lang='Japonés';}
+          x.language_code=langCode; x.lang=selectedLang;
           const total=Number(hit?.set?.cardCount?.total||0)||0;
           if(total && !String(x.number||'').includes('/')) x.number=String(rawNum).replace(/^0+/,'')+'/'+total;
           return x;
@@ -1073,6 +1099,9 @@ async function saveItem(){
   recognition.set_code=String(recognition.set_code||recognition.expansion_code||recognition.code||'').trim().toUpperCase();
   recognition.expansion=canonicalExternalExpansion(recognition.set_code,recognition.expansion);
   recognition.variant=String(document.getElementById('scanVariant')?.value||recognition.variant||'').trim();
+  recognition.lang=String(document.getElementById('lang')?.value||recognition.lang||'Español').trim();
+  const saveLangMap={Español:'ES',Inglés:'EN',Japonés:'JA',Francés:'FR',Alemán:'DE',Italiano:'IT',Portugués:'PT',Coreano:'KO'};
+  recognition.language_code=saveLangMap[recognition.lang]||recognition.language_code||'';
   window.lastRecognition=recognition;
 
   const x={
@@ -1089,6 +1118,7 @@ async function saveItem(){
     variant:(recognition.variant||'').trim(),
     cardmarketProductId:String(recognition.cardmarketProductId||'').trim(),
     cardmarketNameEnglish:String(recognition.cardmarketNameEnglish||'').trim(),
+    cardmarketExactUrl:String(recognition.cardmarketExactUrl||'').trim(),
     marketUrl:(()=>{const draft={...recognition,kind:currentKind||'card'};return getCardmarketUrl(draft)||'';})(),
     marketUrlExact:'',
     cardmarketLanguageId:(String(document.getElementById('lang')?.value||'Inglés')==='Español'?4:1),
