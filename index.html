@@ -866,6 +866,36 @@ function getSelectedExpansion(){
   return String(sel.value||'').trim();
 }
 
+// Para cartas japonesas mostramos SIEMPRE el nombre de la expansión occidental
+// correspondiente. El idioma de la carta sigue siendo Japonés, pero el campo
+// "Expansión" usa la denominación internacional/occidental para que coincida
+// con Cardmarket y con la colección del usuario.
+const JP_TO_WESTERN_EXPANSION={
+  SV1S:'Scarlet & Violet',SV1V:'Scarlet & Violet',
+  SV1A:'Paldea Evolved',SV2P:'Paldea Evolved',SV2D:'Paldea Evolved',SV2A:'151',
+  SV3:'Obsidian Flames',SV3A:'Paradox Rift',SV4M:'Paradox Rift',SV4K:'Paradox Rift',
+  SV4A:'Paldean Fates',SV5K:'Temporal Forces',SV5M:'Temporal Forces',SV5A:'Twilight Masquerade',
+  SV6:'Twilight Masquerade',SV6A:'Shrouded Fable',SV7:'Stellar Crown',SV7A:'Surging Sparks',
+  SV8:'Surging Sparks',SV8A:'Prismatic Evolutions',SV9:'Journey Together',SV9A:'Destined Rivals',
+  SV10:'The Glory of Team Rocket',SV11B:'Black Bolt',SV11W:'White Flare',
+  S1W:'Sword & Shield',S1H:'Sword & Shield',S2:'Rebel Clash',S3:'Darkness Ablaze',
+  S3A:'Vivid Voltage',S4:'Vivid Voltage',S4A:'Shining Fates',S5I:'Battle Styles',S5R:'Battle Styles',
+  S6H:'Chilling Reign',S6K:'Chilling Reign',S6A:'Evolving Skies',S7D:'Evolving Skies',S7R:'Evolving Skies',
+  S7A:'Evolving Skies',S8:'Fusion Strike',S8A:'Celebrations',S8B:'Celebrations',S9:'Brilliant Stars',
+  S9A:'Astral Radiance',S10D:'Astral Radiance',S10P:'Astral Radiance',S10A:'Lost Origin',
+  S11:'Lost Origin',S11A:'Silver Tempest',S12:'Silver Tempest',S12A:'Crown Zenith',
+  SM1S:'Sun & Moon',SM1M:'Sun & Moon',SM2L:'Guardians Rising',SM2K:'Guardians Rising',
+  SM3H:'Burning Shadows',SM3N:'Burning Shadows',SM4S:'Crimson Invasion',SM4A:'Crimson Invasion',
+  SM5S:'Ultra Prism',SM5M:'Ultra Prism',SM6S:'Forbidden Light',SM6B:'Forbidden Light',
+  SM7:'Celestial Storm',SM8:'Lost Thunder',SM8B:'Team Up',SM9:'Team Up',SM9A:'Unbroken Bonds',
+  SM10:'Unbroken Bonds',SM10A:'Unified Minds',SM11:'Unified Minds',SM11B:'Cosmic Eclipse',
+  SM12:'Cosmic Eclipse',SM12A:'Hidden Fates'
+};
+function westernExpansionForJapanese(code,fallback=''){
+  const c=normalizeJpCode(code);
+  return JP_TO_WESTERN_EXPANSION[c] || String(fallback||'').trim();
+}
+
 function promoParentExpansion(code,number,apiExpansion){
   const c=normalizeSetCode(code);
   const n=String(number||'').trim().toUpperCase().replace(/\D/g,'').padStart(3,'0');
@@ -895,7 +925,8 @@ function promoParentExpansion(code,number,apiExpansion){
 
 async function enrichCardFromTCGdex(x){
   try{
-    const code=normalizeSetCode(x?.set_code||x?.expansion_code||x?.code||'');
+    const rawDetectedCode=String(x?.set_code||x?.expansion_code||x?.code||'').trim().toUpperCase();
+    const code=(String(x?.language_code||'').trim().toUpperCase()==='JA' && /^SV[-_ ]?P$/.test(rawDetectedCode)) ? 'SV-P' : normalizeSetCode(rawDetectedCode);
     const rawNum=String(x?.collector_number||x?.number||'').trim().split('/')[0];
     const num=code==='30C' ? rawNum.padStart(3,'0') : (rawNum.replace(/^0+/,'')||rawNum);
     if(!code || !num) return x;
@@ -922,6 +953,7 @@ async function enrichCardFromTCGdex(x){
         if(hit?.name){
           x.name=String(hit.name).trim()||x.name;
           if(hit?.set?.name) x.expansion=String(hit.set.name).trim();
+          if(japaneseCode) x.expansion=westernExpansionForJapanese(code,x.expansion||'');
           if(hit?.set?.id && !x.set_code) x.set_code=String(hit.set.id).trim().toUpperCase();
           const cmId=hit?.pricing?.cardmarket?.idProduct||hit?.thirdParty?.cardmarket||hit?.cardmarketProductId||'';
           if(cmId)x.cardmarketProductId=String(cmId);
@@ -955,6 +987,7 @@ async function enrichCardFromTCGdex(x){
     if(hit.image) x.imageUrl=String(hit.image).replace(/\/$/,'')+'/high.webp';
     const setName=String(hit.set?.name||'').trim();
     if(setName && promo && !/promo|black star/i.test(setName)) x.expansion=setName;
+    if(japaneseCode) x.expansion=westernExpansionForJapanese(code,x.expansion||'');
     return x;
   }catch(e){return x;}
 }
@@ -968,7 +1001,7 @@ function fillRecognition(x){
   const __identity=promoIdentityFallback(x);
   if(__identity){ __code=__identity[0]; __num=__identity[1]; x.name=__identity[2]; x.number=__identity[1]; x.expansion=__identity[3]; }
   const __promoExp=promoParentExpansion(__code,__num,x.expansion);
-  const __exp=__isJapanese ? String(x.expansion||'') : (__promoExp || expansionFromCollector(__code,__num));
+  const __exp=__isJapanese ? westernExpansionForJapanese(__code,x.expansion||'') : (__promoExp || expansionFromCollector(__code,__num));
   if(__code) x.set_code=__code;
   if(__exp) x.expansion=__exp;
   if(!x.imageUrl) x.imageUrl=x.image_url||x.cardImage||x.card_image||x.image||'';
@@ -978,7 +1011,13 @@ function fillRecognition(x){
   window.lastRecognition=x||{};
   document.getElementById('name').value=x.name||'';
   const map={'ES':'Español','EN':'Inglés','JA':'Japonés','FR':'Francés','DE':'Alemán','IT':'Italiano','PT':'Portugués','KO':'Coreano'};
-  document.getElementById('lang').value=map[x.language_code]||x.language||'Español';
+  // El idioma visible de la propia carta, detectado por Gemini, determina el
+  // idioma de la expansión. Si Gemini no está seguro, conservamos el selector
+  // actual para que el usuario pueda corregirlo manualmente.
+  const detectedLang=map[String(x.language_code||'').trim().toUpperCase()]||String(x.language||'').trim();
+  if(detectedLang && map[String(x.language_code||'').trim().toUpperCase()]){
+    document.getElementById('lang').value=detectedLang;
+  }
   populateExpansionOptions(x.expansion||'');
   document.getElementById('number').value=x.number||'';
   document.getElementById('market').value='';
@@ -2880,14 +2919,16 @@ function setSaveEnabled(enabled){
 window.POKESCAN_EXPANSION_DB={ "sets": {"PBL": "Pitch Black", "CRI": "Chaos Rising", "POR": "Perfect Order", "ASC": "Héroes Ascendentes", "PHF": "Phantasmal Flames", "PFL": "Llamas Fantasmales", "MEG": "Megaevolución", "MEP": "Megaevolución — Cartas Promo", "MEE": "Mega Evolution Energy", "BLK": "Black Bolt", "WHT": "White Flare", "DRI": "Destined Rivals", "JTG": "Journey Together", "PRE": "Prismatic Evolutions", "PAF": "Paldean Fates", "SSP": "Surging Sparks", "SCR": "Stellar Crown", "SFA": "Shrouded Fable", "TWM": "Twilight Masquerade", "TEF": "Temporal Forces", "PAR": "Paradox Rift", "MEW": "151", "OBF": "Obsidian Flames", "PAL": "Paldea Evolved", "SVI": "Scarlet & Violet", "CRZ": "Cenit Supremo", "SIT": "Silver Tempest", "LOR": "Lost Origin", "PGO": "Pokémon GO", "ASR": "Astral Radiance", "BRS": "Brilliant Stars", "FST": "Fusion Strike", "EVS": "Evolving Skies", "CRE": "Chilling Reign", "BST": "Battle Styles", "SHF": "Shining Fates", "VIV": "Vivid Voltage", "CPA": "Champion’s Path", "DAA": "Darkness Ablaze", "RCL": "Rebel Clash", "SSH": "Sword & Shield", "CEC": "Cosmic Eclipse", "HIF": "Hidden Fates", "UNB": "Unbroken Bonds", "UNM": "Unified Minds", "DET": "Detective Pikachu", "TEU": "Unión de Aliados", "LOT": "Lost Thunder", "DRM": "Dragon Majesty", "CES": "Celestial Storm", "FLI": "Forbidden Light", "UPR": "Ultra Prism", "CIN": "Crimson Invasion", "BUS": "Burning Shadows", "GRI": "Guardians Rising", "SUM": "Sun & Moon", "EVO": "Evolutions", "STS": "Steam Siege", "FCO": "Fates Collide", "GEN": "Generations", "BKT": "BREAKthrough", "BKP": "BREAKpoint", "AOR": "Ancient Origins", "ROS": "Roaring Skies", "PRC": "Primal Clash", "FLF": "Flashfire", "XY": "XY", "PLS": "Plasma Storm", "PLF": "Plasma Freeze", "PLB": "Plasma Blast", "BCR": "Boundaries Crossed", "DRV": "Dragon Vault", "DRX": "Dragons Exalted", "DEX": "Dark Explorers", "NXD": "Next Destinies", "NVI": "Noble Victories", "EPO": "Emerging Powers", "BLW": "Black & White", "LTR": "Legendary Treasures", "PL": "Platinum", "AR": "Arceus", "SV": "Supreme Victors", "RR": "Rising Rivals", "SF": "Stormfront", "LA": "Legends Awakened", "MD": "Majestic Dawn", "GE": "Great Encounters", "SW": "Secret Wonders", "DP": "Diamond & Pearl", "MT": "Mysterious Treasures", "POP": "POP Series", "HS": "HeartGold & SoulSilver", "UL": "HS—Unleashed", "UD": "HS—Undaunted", "TM": "HS—Triumphant", "CL": "Call of Legends", "HGSS": "HGSS Black Star Promos", "BS": "Base Set", "JU": "Jungle", "FO": "Fossil", "B2": "Base Set 2", "TR": "Team Rocket", "G1": "Gym Heroes", "G2": "Gym Challenge", "N1": "Neo Genesis", "N2": "Neo Discovery", "N3": "Neo Revelation", "N4": "Neo Destiny", "LC": "Legendary Collection", "EX": "Expedition Base Set", "AQ": "Aquapolis", "SK": "Skyridge", "RS": "Ruby & Sapphire", "SS": "Sandstorm", "DR": "Dragon", "MA": "Team Magma vs Team Aqua", "HL": "Hidden Legends", "RG": "FireRed & LeafGreen", "RRR": "Team Rocket Returns", "EM": "Emerald", "UF": "Unseen Forces", "DS": "Delta Species", "LM": "Legend Maker", "HP": "Holon Phantoms", "CG": "Crystal Guardians", "DF": "Dragon Frontiers", "PK": "Power Keepers", "SVP": "Escarlata y Púrpura — Cartas Promo", "30C": "30th Celebration", "SM": "Sol y Luna — Promos Estrella Negra"}, "aliases": {"PVL": "PFL", "MEP": "MEP", "ASC": "ASC", "CRZ": "CRZ", "MEW": "MEW"}};
 
 const POKESCAN_EXPANSION_DB=window.POKESCAN_EXPANSION_DB;
-window.POKESCAN_JP_SET_DB={"SV1S":"Scarlet ex","SV1V":"Violet ex","SV1A":"Triplet Beat","SV2P":"Snow Hazard","SV2D":"Clay Burst","SV2A":"Pokémon Card 151","SV3":"Ruler of the Black Flame","SV3A":"Raging Surf","SV4M":"Future Flash","SV4K":"Ancient Roar","SV4A":"Shiny Treasure ex","SV5K":"Wild Force","SV5M":"Cyber Judge","SV5A":"Crimson Haze","SV6":"Mask of Change","SV6A":"Night Wanderer","SV7":"Stellar Miracle","SV7A":"Paradise Dragona","SV8":"Super Electric Breaker","SV8A":"Terastal Festival ex","SV9":"Battle Partners","SV9A":"Heat Wave Arena","SV10":"The Glory of Team Rocket","SV11B":"Black Bolt","SV11W":"White Flare","M1L":"Mega Brave","M1S":"Mega Symphonia","M2":"Inferno X","M2A":"Mega Dream ex","M3":"Nihil Zero","M4":"Ninja Spinner","M5":"Abyss Eye","M6":"Storm Emeralda","S1W":"Shield","S1H":"Sword","S2":"Rebel Clash","S3":"Infinity Zone","S3A":"Legendary Heartbeat","S4":"Amazing Volt Tackle","S4A":"Shiny Star V","S5I":"Ichigeki Master","S5R":"Rapid Strike Master","S6H":"Silver Lance","S6K":"Jet Black Spirit","S6A":"Matchless Fighter","S7D":"Skyscraping Perfection","S7R":"Blue Sky Stream","S7A":"Eevee Heroes","S8":"Fusion Arts","S8A":"25th Anniversary Collection","S8B":"VMAX Climax","S9":"Star Birth","S9A":"Battle Region","S10D":"Time Gazer","S10P":"Space Juggler","S10A":"Dark Phantasma","S11":"Lost Abyss","S11A":"Incandescent Arcana","S12":"Paradigm Trigger","S12A":"VSTAR Universe","SM1S":"Collection Sun","SM1M":"Collection Moon","SM2L":"Alolan Moonlight","SM2K":"Alolan Kokoro","SM3H":"Hibana","SM3N":"A Clash of the Sky and Sea","SM4S":"Awakened Heroes","SM4A":"Crack Shot","SM5S":"Ultra Sun","SM5M":"Ultra Moon","SM6S":"Forbidden Light","SM6B":"Forbidden Light","SM7":"Thunderclap Spark","SM8":"Super Burst Impact","SM8B":"Dark Order","SM9":"Tag Bolt","SM9A":"Night Unison","SM10":"Double Blaze","SM10A":"GG End","SM11":"Miracle Twin","SM11B":"Dream League","SM12":"Alter Genesis","SM12A":"Tag All Stars","XY1":"Collection X / Collection Y","XY2":"Wild Blaze","XY3":"Rising Fist","XY4":"Phantom Gate","XY5":"Gaia Volcano / Tidal Storm","XY6":"Emerald Break","XY7":"Bandit Ring","XY8":"Red Flash / Blue Impact","XY9":"Rage of the Broken Sky","XY10":"The Best of XY","XY11":"Cruel Traitor / Explosive Fighter","XY12":"20th Anniversary Festa","BW1":"Black Collection / White Collection","BW2":"Red Collection","BW3":"Psycho Drive / Hail Blizzard","BW4":"Dark Rush","BW5":"Dragon Blade / Dragon Blast","BW6":"Freeze Bolt / Cold Flare","BW7":"Plasma Gale","BW8":"Spiral Force / Thunder Knuckle","BW9":"Megalo Cannon","BW10":"EX Battle Boost","MP1":"Start Deck 100 Battle Collection","M-P":"Promotional Cards","SVP":"Scarlet & Violet Black Star Promos","M-PRO":"Mega Evolution Promotional Cards"};
+window.POKESCAN_JP_SET_DB={"SV1S":"Scarlet ex","SV1V":"Violet ex","SV1A":"Triplet Beat","SV2P":"Snow Hazard","SV2D":"Clay Burst","SV2A":"Pokémon Card 151","SV3":"Ruler of the Black Flame","SV3A":"Raging Surf","SV4M":"Future Flash","SV4K":"Ancient Roar","SV4A":"Shiny Treasure ex","SV5K":"Wild Force","SV5M":"Cyber Judge","SV5A":"Crimson Haze","SV6":"Mask of Change","SV6A":"Night Wanderer","SV7":"Stellar Miracle","SV7A":"Paradise Dragona","SV8":"Super Electric Breaker","SV8A":"Terastal Festival ex","SV9":"Battle Partners","SV9A":"Heat Wave Arena","SV10":"The Glory of Team Rocket","SV11B":"Black Bolt","SV11W":"White Flare","M1L":"Mega Brave","M1S":"Mega Symphonia","M2":"Inferno X","M2A":"Mega Dream ex","M3":"Nihil Zero","M4":"Ninja Spinner","M5":"Abyss Eye","M6":"Storm Emeralda","S1W":"Shield","S1H":"Sword","S2":"Rebel Clash","S3":"Infinity Zone","S3A":"Legendary Heartbeat","S4":"Amazing Volt Tackle","S4A":"Shiny Star V","S5I":"Ichigeki Master","S5R":"Rapid Strike Master","S6H":"Silver Lance","S6K":"Jet Black Spirit","S6A":"Matchless Fighter","S7D":"Skyscraping Perfection","S7R":"Blue Sky Stream","S7A":"Eevee Heroes","S8":"Fusion Arts","S8A":"25th Anniversary Collection","S8B":"VMAX Climax","S9":"Star Birth","S9A":"Battle Region","S10D":"Time Gazer","S10P":"Space Juggler","S10A":"Dark Phantasma","S11":"Lost Abyss","S11A":"Incandescent Arcana","S12":"Paradigm Trigger","S12A":"VSTAR Universe","SM1S":"Collection Sun","SM1M":"Collection Moon","SM2L":"Alolan Moonlight","SM2K":"Alolan Kokoro","SM3H":"Hibana","SM3N":"A Clash of the Sky and Sea","SM4S":"Awakened Heroes","SM4A":"Crack Shot","SM5S":"Ultra Sun","SM5M":"Ultra Moon","SM6S":"Forbidden Light","SM6B":"Forbidden Light","SM7":"Thunderclap Spark","SM8":"Super Burst Impact","SM8B":"Dark Order","SM9":"Tag Bolt","SM9A":"Night Unison","SM10":"Double Blaze","SM10A":"GG End","SM11":"Miracle Twin","SM11B":"Dream League","SM12":"Alter Genesis","SM12A":"Tag All Stars","XY1":"Collection X / Collection Y","XY2":"Wild Blaze","XY3":"Rising Fist","XY4":"Phantom Gate","XY5":"Gaia Volcano / Tidal Storm","XY6":"Emerald Break","XY7":"Bandit Ring","XY8":"Red Flash / Blue Impact","XY9":"Rage of the Broken Sky","XY10":"The Best of XY","XY11":"Cruel Traitor / Explosive Fighter","XY12":"20th Anniversary Festa","BW1":"Black Collection / White Collection","BW2":"Red Collection","BW3":"Psycho Drive / Hail Blizzard","BW4":"Dark Rush","BW5":"Dragon Blade / Dragon Blast","BW6":"Freeze Bolt / Cold Flare","BW7":"Plasma Gale","BW8":"Spiral Force / Thunder Knuckle","BW9":"Megalo Cannon","BW10":"EX Battle Boost","MP1":"Start Deck 100 Battle Collection","M-P":"Promotional Cards","SV-P":"Scarlet & Violet Promos","M-PRO":"Mega Evolution Promotional Cards"};
 const POKESCAN_JP_SET_DB=window.POKESCAN_JP_SET_DB;
-function isJapaneseSetCode(code){return !!POKESCAN_JP_SET_DB[String(code||'').trim().toUpperCase()];}
+function isJapaneseSetCode(code){const c=String(code||'').trim().toUpperCase();return c==='SV-P'||!!POKESCAN_JP_SET_DB[c];}
 
 
 function normalizeSetCode(raw){
   const s=String(raw||'').toUpperCase().trim();
   if(!s) return '';
+  // SV-P (japonés) y SVP (occidental) son códigos distintos.
+  if(/^SV[-_ ]?P$/.test(s)) return 'SV-P';
   if(/(^|[^A-Z0-9])30C([^A-Z0-9]|$)/.test(s)) return '30C';
   const clean=s.replace(/[^A-Z0-9]/g,'');
   if(POKESCAN_EXPANSION_DB.sets[clean] || POKESCAN_JP_SET_DB[clean]) return clean;
