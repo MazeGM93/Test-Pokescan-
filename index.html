@@ -681,6 +681,7 @@ function isCardmarketUrl(u){
 function getCardmarketUrl(x){
   const manual=String(x?.marketUrlExact||x?.marketUrlManual||'').trim();
   if(manual && isCardmarketUrl(manual)) return manual;
+  if(x?._manualLookup && isCardmarketUrl(x?.cardmarketExactUrl)) return String(x.cardmarketExactUrl);
   // Solo un enlace manual fijado bloquea la generación automática.
   if(x?.marketUrlManualLocked) return '';
   const inferred={...x, set_code:inferCardmarketCode(x)};
@@ -722,7 +723,7 @@ async function applyManualCardCode(inputId){
   if(parsed.languageCode && langSel && langMap[parsed.languageCode]) langSel.value=langMap[parsed.languageCode];
   else if(japaneseCode && langSel) langSel.value='Japonés';
   const selectedManualLang=langSel?.value||'Español';
-  const x={kind:currentKind,set_code:parsed.code,expansion_code:parsed.code,collector_number:parsed.number,number:parsed.number,name:'',imageUrl:'',cardmarketProductId:'',cardmarketExactUrl:'',source:'',sourceUrl:'',language_code:selectedManualLang==='Japonés'?'JA':(Object.entries(langMap).find(([,v])=>v===selectedManualLang)?.[0]||''),lang:selectedManualLang};
+  const x={kind:currentKind,set_code:parsed.code,expansion_code:parsed.code,collector_number:parsed.number,number:parsed.number,name:'',imageUrl:'',cardmarketProductId:'',cardmarketExactUrl:'',source:'',sourceUrl:'',language_code:selectedManualLang==='Japonés'?'JA':(Object.entries(langMap).find(([,v])=>v===selectedManualLang)?.[0]||''),lang:selectedManualLang,_manualLookup:true};
   const exp=canonicalExternalExpansion(parsed.code,expansionFromCollector(parsed.code,parsed.number));
   if(exp)x.expansion=exp;
   window.lastRecognition=x;
@@ -924,6 +925,7 @@ async function enrichCardFromTCGdex(x){
           if(hit?.set?.id && !x.set_code) x.set_code=String(hit.set.id).trim().toUpperCase();
           const cmId=hit?.pricing?.cardmarket?.idProduct||hit?.thirdParty?.cardmarket||hit?.cardmarketProductId||'';
           if(cmId)x.cardmarketProductId=String(cmId);
+          if(x._manualLookup && hit?.cardmarketExactUrl) x.cardmarketExactUrl=String(hit.cardmarketExactUrl);
           if(hit.imageUrl||hit.image) x.imageUrl=String(hit.imageUrl||hit.image).trim();
           if(hit.cardmarketNameEnglish)x.cardmarketNameEnglish=String(hit.cardmarketNameEnglish).trim();
           x.source=String(hit.source||x.source||'').trim();
