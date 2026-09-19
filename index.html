@@ -892,7 +892,8 @@ const JP_TO_WESTERN_EXPANSION={
   SM12:'Cosmic Eclipse',SM12A:'Hidden Fates'
 };
 function westernExpansionForJapanese(code,fallback=''){
-  const c=normalizeJpCode(code);
+  const raw=String(code||'').trim();
+  const c=/^SV[-_ ]?P$/i.test(raw) ? 'SV-P' : raw.toUpperCase().replace(/[\s_-]+/g,'');
   return JP_TO_WESTERN_EXPANSION[c] || String(fallback||'').trim();
 }
 
