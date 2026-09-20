@@ -392,7 +392,7 @@ header{height:76px;margin-bottom:10px}.brand{display:grid;grid-template-columns:
 .bulk-frame{position:absolute;z-index:2;height:88%;aspect-ratio:63/88;width:auto;max-width:none;border:2px solid white;border-radius:12px;box-shadow:0 0 0 999px #0004;pointer-events:none}
 .bulk-top{display:flex;justify-content:space-between;gap:8px;align-items:center}.bulk-count{font-weight:900;color:#287bea}.bulk-state{font-size:11px;color:#78849b;font-weight:800;text-align:right}
 .bulk-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}.bulk-actions button{min-height:44px}.bulk-ok-btn{min-height:64px!important;font-size:17px;font-weight:950}.bulk-code-big{display:inline-flex;align-items:center;margin-left:8px;padding:3px 8px;border-radius:8px;background:#edf4ff;color:#1f64c9;font-size:15px;font-weight:950;white-space:nowrap;vertical-align:middle}
-.bulk-list{margin-top:10px;display:grid;gap:7px;max-height:42vh;overflow:auto}.bulk-item{display:grid;grid-template-columns:42px 1fr auto;gap:8px;align-items:center;background:#fff;border:1px solid #dfe5ef;border-radius:11px;padding:7px 8px;cursor:pointer;transition:.15s ease}.bulk-item:hover{border-color:#b9c8df}.bulk-item.bulk-done{background:#effbf2;border-color:#69c47a}.bulk-num{width:34px;height:34px;border-radius:9px;background:#edf4ff;color:#287bea;display:flex;align-items:center;justify-content:center;font-weight:900}.bulk-item.bulk-done .bulk-num{background:#28a745;color:#fff}.bulk-main{min-width:0}.bulk-main b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bulk-main small{display:block;margin-top:2px;color:#78849b;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bulk-deck{font-weight:950;font-size:12px;white-space:nowrap}.bulk-summary{margin-top:9px;padding:9px;background:#f7f8fb;border:1px solid #dfe5ef;border-radius:11px;font-size:11px}.bulk-summary b{font-size:13px}.bulk-hidden-input{position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none}
+.bulk-list{margin-top:10px;display:grid;gap:7px;max-height:42vh;overflow:auto}.bulk-sheet.bulk-finished .bulk-camera,.bulk-sheet.bulk-finished .bulk-actions{display:none!important}.bulk-sheet.bulk-finished .bulk-list{max-height:68vh}.bulk-item{display:grid;grid-template-columns:42px 1fr auto;gap:8px;align-items:center;background:#fff;border:1px solid #dfe5ef;border-radius:11px;padding:7px 8px;cursor:pointer;transition:.15s ease}.bulk-item:hover{border-color:#b9c8df}.bulk-item.bulk-done{background:#effbf2;border-color:#69c47a}.bulk-num{width:34px;height:34px;border-radius:9px;background:#edf4ff;color:#287bea;display:flex;align-items:center;justify-content:center;font-weight:900}.bulk-item.bulk-done .bulk-num{background:#28a745;color:#fff}.bulk-main{min-width:0}.bulk-main b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bulk-main small{display:block;margin-top:2px;color:#78849b;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bulk-deck{font-weight:950;font-size:12px;white-space:nowrap}.bulk-summary{margin-top:9px;padding:9px;background:#f7f8fb;border:1px solid #dfe5ef;border-radius:11px;font-size:11px}.bulk-summary b{font-size:13px}.bulk-hidden-input{position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none}
 @media(max-width:500px){.bulk-camera{height:auto;min-height:210px;max-height:none;aspect-ratio:4/3}.bulk-frame{height:90%;aspect-ratio:63/88}.bulk-sheet{padding:10px}.bulk-item{grid-template-columns:36px 1fr auto}.bulk-num{width:30px;height:30px}.bulk-deck{font-size:11px}.bulk-code-big{font-size:14px;padding:3px 6px;margin-left:5px}}
 </style>
 <style id="pokescan-compact-result">
@@ -501,7 +501,7 @@ function openScan(k){
 let bulkStream=null, bulkItems=[], bulkRunning=false, bulkBusy=false, bulkTimer=null, bulkSession=0, bulkLastSignature='';
 function openBulk(){
   bulkSession++; bulkItems=[]; bulkRunning=false; bulkBusy=false; bulkLastSignature='';
-  const m=document.getElementById('bulkModal'); if(m)m.classList.add('show');
+  const m=document.getElementById('bulkModal'); if(m){m.classList.remove('bulk-finished');m.classList.add('show');}
   const list=document.getElementById('bulkList'); if(list)list.innerHTML='';
   const sum=document.getElementById('bulkSummary'); if(sum){sum.style.display='none';sum.innerHTML='';}
   updateBulkUI(); startBulkCamera();
@@ -606,6 +606,10 @@ function markBulkDone(index){
 function finishBulk(){
   if(!bulkItems.length){alert('Todavía no hay cartas escaneadas.');return;}
   bulkRunning=false;clearTimeout(bulkTimer);bulkTimer=null;
+  // En el reparto ya no necesitamos la cámara: detenemos el stream y dejamos solo la lista.
+  if(bulkStream){bulkStream.getTracks().forEach(t=>{try{t.stop()}catch(e){}});bulkStream=null;}
+  const modal=document.getElementById('bulkModal');
+  if(modal)modal.classList.add('bulk-finished');
   // La carta visible arriba del taco es la ÚLTIMA que entró: invertimos el lote.
   const topFirst=[...bulkItems].reverse();
   const deckMap=new Map();let nextDeck=1;
