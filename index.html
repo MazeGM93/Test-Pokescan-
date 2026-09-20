@@ -501,7 +501,7 @@ function openScan(k){
 let bulkStream=null, bulkItems=[], bulkRunning=false, bulkBusy=false, bulkTimer=null, bulkSession=0, bulkLastSignature='';
 function openBulk(){
   bulkSession++; bulkItems=[]; bulkRunning=false; bulkBusy=false; bulkLastSignature='';
-  const m=document.getElementById('bulkModal'); if(m){m.classList.remove('bulk-finished');m.classList.add('show');}
+  const m=document.getElementById('bulkModal'); if(m){m.classList.remove('bulk-finished'); const sh=m.querySelector('.bulk-sheet'); if(sh)sh.classList.remove('bulk-finished'); m.classList.add('show');}
   const list=document.getElementById('bulkList'); if(list)list.innerHTML='';
   const sum=document.getElementById('bulkSummary'); if(sum){sum.style.display='none';sum.innerHTML='';}
   updateBulkUI(); startBulkCamera();
@@ -514,7 +514,7 @@ function closeBulk(){
 }
 function resumeBulkScanning(){
   const modal=document.getElementById('bulkModal');
-  if(modal)modal.classList.remove('bulk-finished');
+  if(modal){modal.classList.remove('bulk-finished'); const sh=modal.querySelector('.bulk-sheet'); if(sh)sh.classList.remove('bulk-finished');}
   const st=document.getElementById('bulkState');
   if(st)st.textContent='Listo: coloca la carta y pulsa OK';
   startBulkCamera();
@@ -617,7 +617,7 @@ function finishBulk(){
   // En el reparto ya no necesitamos la cámara: detenemos el stream y dejamos solo la lista.
   if(bulkStream){bulkStream.getTracks().forEach(t=>{try{t.stop()}catch(e){}});bulkStream=null;}
   const modal=document.getElementById('bulkModal');
-  if(modal)modal.classList.add('bulk-finished');
+  if(modal){modal.classList.add('bulk-finished'); const sh=modal.querySelector('.bulk-sheet'); if(sh)sh.classList.add('bulk-finished');}
   // La carta visible arriba del taco es la ÚLTIMA que entró: invertimos el lote.
   const topFirst=[...bulkItems].reverse();
   const deckMap=new Map();let nextDeck=1;
