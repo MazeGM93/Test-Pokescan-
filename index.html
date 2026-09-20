@@ -595,7 +595,7 @@ function renderBulkList(finished=false){
   list.innerHTML=items.map((x,i)=>{
     const originalIndex=bulkItems.indexOf(x);
     const done=finished&&x._bulkDone;
-    return '<div class="bulk-item'+(done?' bulk-done':'')+'" '+(finished?'onclick="markBulkDone('+originalIndex+')"':'')+'><div class="bulk-num">'+(done?'✓':(i+1))+'</div><div class="bulk-main"><b>'+esc(x.name||'Sin nombre')+' <span class="bulk-code-big">'+esc((x.bulkCode||x.set_code||'')+' '+(x.bulkNumber||x.number||''))+'</span></b><small>'+esc(x.expansion||x.set_code||'')+' · '+esc(x.lang||'')+'</small></div><div class="bulk-deck">'+(finished?'Mazo '+x._bulkDeck:'—')+'</div></div>';
+    return '<div class="bulk-item'+(done?' bulk-done':'')+'" '+(finished?'onclick="markBulkDone('+originalIndex+')"':'')+'><div class="bulk-num">'+(done?'✓':(finished?(i+1):(bulkItems.length-i)))+'</div><div class="bulk-main"><b>'+esc(x.name||'Sin nombre')+' <span class="bulk-code-big">'+esc((x.bulkCode||x.set_code||'')+' '+(x.bulkNumber||x.number||''))+'</span></b><small>'+esc(x.expansion||x.set_code||'')+' · '+esc(x.lang||'')+'</small></div><div class="bulk-deck">'+(finished?'Mazo '+x._bulkDeck:'—')+'</div></div>';
   }).join('');
 }
 function markBulkDone(index){
