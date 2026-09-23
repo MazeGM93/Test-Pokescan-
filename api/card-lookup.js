@@ -1,3 +1,47 @@
+
+async function findCardmarketExact(code, number, preferredLang='en') {
+  const cleanCode=String(code||'').trim().toUpperCase();
+  const rawNum=String(number||'').split('/')[0].trim();
+  const cleanNum=rawNum.replace(/^0+/,'') || rawNum;
+  const numCandidates=[...new Set([rawNum,cleanNum,cleanNum.padStart(3,'0')].filter(Boolean))];
+  if(!cleanCode || !rawNum) return null;
+  const queries=[...new Set(numCandidates.flatMap(n=>[cleanCode+n,cleanCode+' '+n]))];
+  for(const q of queries){
+    const url='https://www.cardmarket.com/en/Pokemon/Products/Search?searchString='+encodeURIComponent(q)+'&searchMode=v2&mode=gallery';
+    try{
+      const r=await fetch(url,{headers:{'User-Agent':'Mozilla/5.0 (compatible; PokeScan/1.0)','Accept':'text/html,application/xhtml+xml'},cache:'no-store'});
+      if(!r.ok) continue;
+      const html=await r.text();
+      const re=/href=["']([^"']*\/Products\/Singles\/[^"']+)["']/gi;
+      let m;
+      while((m=re.exec(html))){
+        let href=m[1].replace(/&amp;/g,'&');
+        if(href.startsWith('/')) href='https://www.cardmarket.com'+href;
+        let absolute='';
+        try{absolute=new URL(href,'https://www.cardmarket.com').toString();}catch(e){continue;}
+        const path=decodeURIComponent(new URL(absolute).pathname);
+        const tail=path.split('/').pop()||'';
+        const compact=tail.replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+        const wantedCandidates=numCandidates.map(n=>(cleanCode+n).replace(/[^A-Za-z0-9]/g,'').toUpperCase());
+        const matchedMarker=wantedCandidates.find(w=>compact.endsWith(w));
+        if(!matchedMarker) continue;
+        const parts=path.split('/').filter(Boolean);
+        const setSlug=parts.length>=2?parts[parts.length-2]:'';
+        const marker=matchedMarker;
+        const markerRe=new RegExp('[-_]?'+marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$','i');
+        let cardSlug=tail.replace(markerRe,'').replace(/[-_]+$/,'');
+        let name=decodeURIComponent(cardSlug).replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
+        if(name) name=name.replace(/\bEx\b/g,'ex');
+        const setName=decodeURIComponent(setSlug).replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
+        const langId=({es:4,en:1,fr:2,de:3,it:5,pt:8,ja:7,ko:10}[String(preferredLang||'en').toLowerCase()]||1);
+        const exact=absolute+(absolute.includes('?')?'&':'?')+'language='+langId;
+        return {name, imageUrl:'', cardmarketExactUrl:exact, cardmarketNameEnglish:name, set:{id:setSlug,name:setName}, source:'Cardmarket', sourceUrl:absolute};
+      }
+    }catch(e){}
+  }
+  return null;
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
@@ -37,12 +81,40 @@ module.exports = async function handler(req, res) {
       return '';
     };
 
+    // 0) Descubrimiento dinámico del set: si PokeScan todavía no conoce el código,
+    // intentamos localizarlo en el listado de TCGdex antes de caer en Limitless.
+    // Esto es especialmente importante para expansiones japonesas nuevas (SVxx, Mxx, etc.).
+    let discoveredSetId=setId;
+    let discoveredSetName='';
+    if(!discoveredSetId && code){
+      const discoveryLangs=[...new Set(uniqueLangs.map(x=>String(x).toLowerCase()).concat(['ja','en','es']))];
+      for(const lang of discoveryLangs){
+        try{
+          const sr=await fetch(`https://api.tcgdex.net/v2/${encodeURIComponent(lang)}/sets`,{headers:{Accept:'application/json'},cache:'no-store'});
+          if(!sr.ok) continue;
+          const sets=await sr.json();
+          if(!Array.isArray(sets)) continue;
+          const targetCode=code.replace(/[^A-Z0-9]/g,'').toUpperCase();
+          const found=sets.find(s=>{
+            const sid=String(s?.id||'').replace(/[^A-Z0-9]/g,'').toUpperCase();
+            const sc=String(s?.code||s?.setCode||'').replace(/[^A-Z0-9]/g,'').toUpperCase();
+            return sid===targetCode || sc===targetCode;
+          });
+          if(found?.id){
+            discoveredSetId=String(found.id).trim();
+            discoveredSetName=strip(found.name||found.officialName||'');
+            break;
+          }
+        }catch(e){}
+      }
+    }
+
     // 1) TCGdex: fuente principal. Si responde, devolvemos también su imagen.
-    if(setId){
+    if(discoveredSetId){
       for(const lang of uniqueLangs){
         const urls=[
-          `https://api.tcgdex.net/v2/${encodeURIComponent(lang)}/sets/${encodeURIComponent(setId)}/${encodeURIComponent(cleanNum)}`,
-          `https://api.tcgdex.net/v2/${encodeURIComponent(lang)}/cards/${encodeURIComponent(setId+'-'+cleanNum)}`
+          `https://api.tcgdex.net/v2/${encodeURIComponent(lang)}/sets/${encodeURIComponent(discoveredSetId)}/${encodeURIComponent(cleanNum)}`,
+          `https://api.tcgdex.net/v2/${encodeURIComponent(lang)}/cards/${encodeURIComponent(discoveredSetId+'-'+cleanNum)}`
         ];
         for(const url of urls){
           try{
@@ -57,7 +129,7 @@ module.exports = async function handler(req, res) {
               // inglés para construir slugs exactos de Cardmarket cuando sea posible.
               if(String(lang).toLowerCase()!=='en'){
                 try{
-                  const enUrl=`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(setId+'-'+cleanNum)}`;
+                  const enUrl=`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(discoveredSetId+'-'+cleanNum)}`;
                   const er=await fetch(enUrl,{headers:{Accept:'application/json'},cache:'no-store'});
                   if(er.ok){const ec=await er.json();if(ec&&String(ec.name||'').trim())englishName=String(ec.name).trim();}
                 }catch(e){}
@@ -108,6 +180,15 @@ module.exports = async function handler(req, res) {
           const setName=setMatch?strip(setMatch[1]):'';
           return res.status(200).json({name,localId:cleanNum,id:code+'-'+cleanNum,number:cleanNum,image,imageUrl:image,set:{id:code,name:setName},source:'Limitless',sourceUrl:canonical,cardmarketNameEnglish:name});
         }catch(e){}
+      }
+    }
+    // 3) Cardmarket como último respaldo: busca por código+número y, si existe,
+    // recupera la ficha individual exacta. Esto evita dejar al usuario en una búsqueda
+    // genérica cuando TCGdex/Limitless todavía no tienen la carta nueva.
+    if(code){
+      const cm=await findCardmarketExact(code,cleanNum,uniqueLangs[0]||'en');
+      if(cm?.name){
+        return res.status(200).json({name:cm.name,localId:cleanNum,id:code+'-'+cleanNum,image:'',imageUrl:'',set:cm.set,cardmarketExactUrl:cm.cardmarketExactUrl,cardmarketNameEnglish:cm.cardmarketNameEnglish,source:cm.source,sourceUrl:cm.sourceUrl});
       }
     }
     return res.status(404).json({error:`No se encontró ${code?code+' ':''}${cleanNum} en las fuentes externas.`});
