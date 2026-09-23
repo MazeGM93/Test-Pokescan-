@@ -22,20 +22,17 @@ module.exports = async function handler(req, res) {
     const code = codeImage.match(/^data:([^;]+);base64,(.+)$/);
     const prompt = isCard ? `Identifica esta carta Pokémon y devuelve SOLO JSON válido.
 
-REGLAS ESTRICTAS DE IDIOMA, CÓDIGO Y EXPANSIÓN:
-1) IMAGEN 1: úsala para detectar ÚNICAMENTE el idioma real de la carta. Si el texto es japonés, language_code DEBE ser JA; si es español, ES; si es inglés, EN, etc. NO uses el nombre de la carta para decidir su identidad.
-2) IMAGEN 2: recorte ampliado de la esquina inferior izquierda. Lee ÚNICAMENTE el código principal de la expansión y el número de coleccionista.
-3) IGNORA cualquier pequeño marcador de idioma impreso junto al código, como ES, EN, JP, JA, FR, DE, IT, PT o KO. Por ejemplo, "PFL ES 100" debe devolver set_code="PFL" y number="100".
-4) No unas el código principal con las letras del idioma. "MEP ES 097" significa MEP + 097, no MEPES.
-5) En cartas japonesas conserva el código japonés principal exactamente (por ejemplo SV5A, SV8A, SV9A, SV1S, M2A, M3) y normalízalo a mayúsculas.
-5.1) REGLA ESPECIAL PARA PROMOS: si en la carta aparece "PROMO 195/SV-P" (o cualquier número seguido de "/SV-P"), es una PROMO JAPONESA: set_code="SV-P", number="195" y language_code="JA". NO la conviertas en SVP.
-5.2) Si aparece "SVP 190", "SVP 195", etc., es una PROMO OCCIDENTAL: set_code="SVP", number="190"/"195". SVP y SV-P son códigos distintos y nunca deben mezclarse.
-6) Si el código principal es nuevo o no está en el catálogo interno, devuélvelo igualmente. El servidor intentará localizar la carta por código+número.
-7) Si el código principal realmente no se puede leer con seguridad, déjalo vacío. No inventes códigos.
-8) expansion DEBE quedar vacío. PokeScan decidirá internamente la expansión occidental correspondiente al código.
-9) number debe ser SOLO el número de coleccionista, sin /total.
-10) name puede quedar vacío: el nombre NO se obtiene de Gemini. PokeScan lo rellenará consultando el código+número en la fuente adecuada para el idioma detectado.
-11) Devuelve language y language_code según el idioma visible de la carta, porque ese idioma se utilizará para recuperar el nombre correcto.
+REGLAS ESTRICTAS DE IDIOMA Y EXPANSIÓN:
+1) IMAGEN 1: identifica nombre y el idioma. Si la carta está en japonés o tiene texto japonés, language_code DEBE ser JA.
+2) IMAGEN 2: recorte ampliado de la esquina inferior izquierda. Lee el código de colección y el número.
+3) SI language_code = JA: usa EXCLUSIVAMENTE el catálogo japonés de abajo. No uses códigos occidentales aunque se parezcan. Conserva el código japonés (por ejemplo SV8A, SV9A, SV1S, M2A, M3).
+4) SI language_code != JA: usa EXCLUSIVAMENTE el catálogo occidental que ya conoce PokeScan. No conviertas una carta occidental a un código japonés.
+5) En cartas japonesas, el código puede estar en minúsculas en la impresión (sv8a); devuélvelo normalizado en mayúsculas (SV8A).
+6) En cartas japonesas, usa el número de coleccionista para confirmar el código.
+7) Si el código no se ve con seguridad, déjalo vacío. No inventes códigos.
+8) expansion DEBE ser vacío. PokeScan decide el nombre internamente según el idioma y el código.
+9) number debe ser solo el número de coleccionista, sin /total.
+
 CATÁLOGO JAPONÉS INTERNO (usar SOLO cuando language_code=JA):
 SV1S: Scarlet ex; SV1V: Violet ex; SV1A: Triplet Beat; SV2P: Snow Hazard; SV2D: Clay Burst; SV2A: Pokémon Card 151; SV3: Ruler of the Black Flame; SV3A: Raging Surf; SV4M: Future Flash; SV4K: Ancient Roar; SV4A: Shiny Treasure ex; SV5K: Wild Force; SV5M: Cyber Judge; SV5A: Crimson Haze; SV6: Mask of Change; SV6A: Night Wanderer; SV7: Stellar Miracle; SV7A: Paradise Dragona; SV8: Super Electric Breaker; SV8A: Terastal Festival ex; SV9: Battle Partners; SV9A: Heat Wave Arena; SV10: The Glory of Team Rocket; SV11B: Black Bolt; SV11W: White Flare; M1L: Mega Brave; M1S: Mega Symphonia; M2: Inferno X; M2A: Mega Dream ex; M3: Nihil Zero; M4: Ninja Spinner; M5: Abyss Eye; M6: Storm Emeralda; S1W: Shield; S1H: Sword; S2: Rebel Clash; S3: Infinity Zone; S3A: Legendary Heartbeat; S4: Amazing Volt Tackle; S4A: Shiny Star V; S5I: Ichigeki Master; S5R: Rapid Strike Master; S6H: Silver Lance; S6K: Jet Black Spirit; S6A: Matchless Fighter; S7D: Skyscraping Perfection; S7R: Blue Sky Stream; S7A: Eevee Heroes; S8: Fusion Arts; S8A: 25th Anniversary Collection; S8B: VMAX Climax; S9: Star Birth; S9A: Battle Region; S10D: Time Gazer; S10P: Space Juggler; S10A: Dark Phantasma; S11: Lost Abyss; S11A: Incandescent Arcana; S12: Paradigm Trigger; S12A: VSTAR Universe; SM1S: Collection Sun; SM1M: Collection Moon; SM2L: Alolan Moonlight; SM2K: Alolan Kokoro; SM3H: Hibana; SM3N: A Clash of the Sky and Sea; SM4S: Awakened Heroes; SM4A: Crack Shot; SM5S: Ultra Sun; SM5M: Ultra Moon; SM6S: Forbidden Light; SM6B: Forbidden Light; SM7: Thunderclap Spark; SM8: Super Burst Impact; SM8B: Dark Order; SM9: Tag Bolt; SM9A: Night Unison; SM10: Double Blaze; SM10A: GG End; SM11: Miracle Twin; SM11B: Dream League; SM12: Alter Genesis; SM12A: Tag All Stars; XY1: Collection X / Collection Y; XY2: Wild Blaze; XY3: Rising Fist; XY4: Phantom Gate; XY5: Gaia Volcano / Tidal Storm; XY6: Emerald Break; XY7: Bandit Ring; XY8: Red Flash / Blue Impact; XY9: Rage of the Broken Sky; XY10: The Best of XY; XY11: Cruel Traitor / Explosive Fighter; XY12: 20th Anniversary Festa; BW1: Black Collection / White Collection; BW2: Red Collection; BW3: Psycho Drive / Hail Blizzard; BW4: Dark Rush; BW5: Dragon Blade / Dragon Blast; BW6: Freeze Bolt / Cold Flare; BW7: Plasma Gale; BW8: Spiral Force / Thunder Knuckle; BW9: Megalo Cannon; BW10: EX Battle Boost; MP1: Start Deck 100 Battle Collection; M-P: Promotional Cards; SVP: Scarlet & Violet Black Star Promos; M-PRO: Mega Evolution Promotional Cards
 
@@ -45,7 +42,7 @@ Campos: name, set_code, collector_number, number, expansion, language, language_
     const models = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite'];
     let lastError = null;
     for (const model of models) {
-      const parts = [{ text: prompt }, { text: 'IMAGEN 1 = CARTA COMPLETA. Úsala SOLO para detectar el idioma real de la carta. El nombre se obtendrá después mediante código+número.' }, { inline_data: { mime_type: full[1], data: full[2] } }];
+      const parts = [{ text: prompt }, { text: 'IMAGEN 1 = CARTA COMPLETA. Úsala solo para nombre e idioma.' }, { inline_data: { mime_type: full[1], data: full[2] } }];
       if (isCard && code) parts.push({ text: 'IMAGEN 2 = RECORTE AMPLIADO DE LA ESQUINA INFERIOR IZQUIERDA. Úsala solo para código de expansión y número.' }, { inline_data: { mime_type: code[1], data: code[2] } });
       const body = { contents: [{ parts }], generationConfig: { responseMimeType: 'application/json' } };
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
@@ -56,18 +53,14 @@ Campos: name, set_code, collector_number, number, expansion, language, language_
       let parsed=null; try{parsed=JSON.parse(text)}catch{try{parsed=JSON.parse(text.replace(/^```json\s*/i,'').replace(/```$/i,'').trim())}catch{}}
       if(!parsed){lastError={message:'Gemini no devolvió JSON válido.'};continue;}
       const number=String(parsed.collector_number||parsed.number||'').trim().replace(/^#/,'').split('/')[0];
-      const rawSetCode=String(parsed.set_code||parsed.expansion_code||parsed.code||'').trim().toUpperCase();
-      const rawPromoText=rawSetCode.replace(/\s+/g,'');
-      let setCode=rawSetCode.replace(/[^A-Z0-9-]/g,'');
-      // No confundir la promo japonesa SV-P con la occidental SVP.
-      if(/^(?:PROMO)?\d+\/SV-P$/.test(rawPromoText) || /^SV-P$/.test(rawPromoText)) setCode='SV-P';
+      let setCode=String(parsed.set_code||parsed.expansion_code||parsed.code||'').trim().toUpperCase().replace(/[^A-Z0-9-]/g,'');
       const langCode=String(parsed.language_code||'').trim().toUpperCase();
-      const isJapanese=langCode==='JA' || /japon|japan/i.test(String(parsed.language||'')) || setCode==='SV-P';
+      const isJapanese=langCode==='JA' || /japon|japan/i.test(String(parsed.language||''));
       const directAliases={"PVL":"PFL"};
       if(!isJapanese && directAliases[setCode]) setCode=directAliases[setCode];
-      const expansion=isJapanese ? (setCode==='SV-P' ? 'Scarlet & Violet Black Star Promos' : getJapaneseExpansion(setCode)) : (SET_DB[setCode]||'');
-      // No borramos códigos desconocidos: el motor externo puede descubrir cartas nuevas
-      // mediante código+número. La expansión visible se resolverá después de la búsqueda.
+      const expansion=isJapanese ? getJapaneseExpansion(setCode) : (SET_DB[setCode]||'');
+      // Never invent an expansion. Each language is validated only against its own catalog.
+      if(!expansion) setCode='';
       parsed.language_code=isJapanese?'JA':langCode;
       parsed.collector_number=number; parsed.number=number; parsed.set_code=setCode; parsed.expansion=expansion; parsed.kind=currentKind;
       parsed.cardmarket_language_id=({ES:4,EN:1,FR:2,DE:3,IT:5,JA:7,PT:8,KO:10}[String(parsed.language_code||'').toUpperCase()]||null);
