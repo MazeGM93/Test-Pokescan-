@@ -44,7 +44,7 @@ CATÁLOGO OCCIDENTAL: usa la base occidental interna de PokeScan; no la mezcles 
 Campos: name, set_code, collector_number, number, expansion, language, language_code, variant, confidence (0 a 1).` : `Identifica este producto Pokémon sellado o producto graduado. Devuelve SOLO JSON válido. Lee literalmente nombre, expansión/código, número si aparece y variante. Si el producto muestra un símbolo de set, identifícalo. No inventes datos. Campos: name, set_code, collector_number, number, expansion, language, language_code, variant, confidence (0 a 1).`;
     // Ruta rápida: Flash-Lite está optimizado por Google para baja latencia y extracción de datos.
     // Solo usamos un fallback adicional si Gemini devuelve un error transitorio real (429/503/5xx).
-    const models = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
+    const models = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
     let lastError = null;
     for (let attempt = 0; attempt < models.length; attempt++) {
       const model = models[attempt];
@@ -55,7 +55,7 @@ Campos: name, set_code, collector_number, number, expansion, language, language_
         generationConfig: {
           responseMimeType: 'application/json',
           maxOutputTokens: 256,
-          thinkingConfig: { thinkingLevel: model === 'gemini-3.5-flash-lite' ? 'minimal' : 'low' }
+          thinkingConfig: { thinkingLevel: 'minimal' }
         }
       };
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
