@@ -1,143 +1,279 @@
-const LANG_LABELS={
-  'Español':'Spanish',
-  'Inglés':'English',
-  'Francés':'French',
-  'Alemán':'German',
-  'Italiano':'Italian',
-  'Portugués':'Portuguese',
-  'Japonés':'Japanese',
-  'Coreano':'Korean'
+const LANG_LABELS = {
+  Español: 'Spanish',
+  Inglés: 'English',
+  Francés: 'French',
+  Alemán: 'German',
+  Italiano: 'Italian',
+  Portugués: 'Portuguese',
+  Japonés: 'Japanese',
+  Coreano: 'Korean',
+  Checo: 'Czech',
+  Neerlandés: 'Dutch',
+  Polaco: 'Polish'
 };
 
-const withTimeout=async(url,options={},ms=10000)=>{
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),ms);
-  try{return await fetch(url,{...options,signal:controller.signal,cache:'no-store'});}
-  finally{clearTimeout(timer);}
-};
-
-function slugify(value){
-  return String(value||'').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/&/g,'and').replace(/['’]/g,'').replace(/[^a-zA-Z0-9]+/g,'-')
-    .replace(/^-+|-+$/g,'').toLowerCase();
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function fetchTimeout(url, options={}, ms=8000){
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), ms);
+  try{
+    return await fetch(url,{...options,signal:controller.signal});
+  }finally{ clearTimeout(timer); }
 }
 function cleanText(s){
-  return String(s||'').replace(/<[^>]*>/g,' ').replace(/&nbsp;/gi,' ')
-    .replace(/&amp;/gi,'&').replace(/&#39;|&#x27;/gi,"'").replace(/&quot;/gi,'"')
+  return String(s||'')
+    .replace(/&amp;/gi,'&').replace(/&#39;|&#x27;/gi,"'")
+    .replace(/&quot;|&#x22;/gi,'"').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>')
     .replace(/\s+/g,' ').trim();
 }
-function numNorm(v){return String(v??'').trim().split('/')[0].replace(/^0+/,'')||String(v??'').trim();}
-function codeNorm(v){return String(v||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase();}
-function parseEuro(v){
-  const s=String(v||'').replace(/\u00a0/g,' ').replace(/€/g,'').trim();
-  if(!s || /^n\/?a$/i.test(s) || /^[-–—]$/.test(s)) return null;
-  const cleaned=s.replace(/[^0-9,.-]/g,'');
-  if(!cleaned) return null;
-  const n=cleaned.includes(',') ? Number(cleaned.replace(/\./g,'').replace(',','.')) : Number(cleaned.replace(/,/g,''));
-  return Number.isFinite(n)?n:null;
+function escRe(s){return String(s||'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
+function norm(s){
+  return cleanText(s).toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,' ').trim();
 }
-function addStep(steps,label,detail,status='info'){steps.push({label,detail,status});}
-
-function extractExactEuPrice(text,language,steps){
-  const wanted=LANG_LABELS[language]||'Spanish';
-  const euStart=String(text||'').search(/EU Prices/i);
-  if(euStart<0){addStep(steps,'9. Precios EU','No aparece el bloque EU Prices en la página.','error');return null;}
-  const eu=String(text).slice(euStart,euStart+18000);
-  const stop=eu.search(/US Prices/i);
-  const block=stop>0?eu.slice(0,stop):eu;
-
-  // Markdown generado por Jina: Image: Spanish Spanish | Europe | 470 €
-  const re=new RegExp('(?:Image:\\s*)?'+wanted.replace(/[.*+?^${}()|[\\]\\]/g,'\\$&')+'\\s*\\|\\s*Europe\\s*\\|\\s*([^\\n|]+)','i');
-  let m=block.match(re);
-  if(m){const p=parseEuro(cleanText(m[1]));if(p!=null){addStep(steps,'9. Precio EU','Fila exacta: '+wanted+' + Europe → '+p.toFixed(2)+' €','ok');return p;}}
-
-  // Tabla HTML, por si TCGGO/Jina devuelve HTML en lugar de Markdown.
-  const rowRe=/<tr[^>]*>[\\s\\S]*?<td[^>]*>[\\s\\S]*?'+wanted+'[\\s\\S]*?<td[^>]*>[\\s\\S]*?Europe[\\s\\S]*?<td[^>]*>\\s*([^<]+)</i;
-  m=block.match(rowRe);
-  if(m){const p=parseEuro(cleanText(m[1]));if(p!=null){addStep(steps,'9. Precio EU','Fila HTML exacta: '+wanted+' + Europe → '+p.toFixed(2)+' €','ok');return p;}}
-
-  addStep(steps,'9. Precio EU','La carta existe, pero no hay una fila exacta para '+wanted+' / Europe.','error');
+function rawNumber(n){
+  return String(n||'').split('/')[0].trim().replace(/^0+/,'') || String(n||'').split('/')[0].trim();
+}
+function identityMatches(text, code, number, name){
+  const t=norm(text);
+  const c=norm(code);
+  const n=rawNumber(number);
+  if(!c || !n) return false;
+  const codeNum=norm(`${code} ${n}`);
+  const compact=t.replace(/\s+/g,'');
+  const codeCompact=(c+n).replace(/\s+/g,'');
+  const hasCodeNum=t.includes(codeNum) || compact.includes(codeCompact);
+  if(!hasCodeNum) return false;
+  if(name){
+    const nn=norm(name);
+    const words=nn.split(' ').filter(w=>w.length>=3).slice(0,4);
+    const hits=words.filter(w=>t.includes(w)).length;
+    if(words.length && hits<Math.min(2,words.length)) return false;
+  }
+  return true;
+}
+function absoluteTcggoUrl(href){
+  try{
+    const u=new URL(href,'https://www.tcggo.com');
+    if(u.hostname!=='www.tcggo.com' && u.hostname!=='tcggo.com') return '';
+    if(!/^\/pokemon\//i.test(u.pathname)) return '';
+    if(/\/singles(?:\/|$)/i.test(u.pathname)) return '';
+    return u.toString();
+  }catch(e){return '';}
+}
+function collectCandidates(text, code, number, name){
+  const out=[];
+  const seen=new Set();
+  const add=(url,context)=>{
+    const u=absoluteTcggoUrl(url);
+    if(!u || seen.has(u)) return;
+    const ok=identityMatches(context||text,code,number,name) ||
+      identityMatches(u,code,number,'');
+    if(ok){seen.add(u);out.push({url:u,context:String(context||'').slice(0,1200)});}
+  };
+  // Markdown links
+  let m;
+  const md=/\]\((https?:\/\/(?:www\.)?tcggo\.com\/pokemon\/[^)\s]+)\)/gi;
+  while((m=md.exec(text))){
+    const start=Math.max(0,m.index-500), end=Math.min(text.length,m.index+m[0].length+500);
+    add(m[1],text.slice(start,end));
+  }
+  // Raw URLs
+  const raw=/https?:\/\/(?:www\.)?tcggo\.com\/pokemon\/[^\s)\]"']+/gi;
+  while((m=raw.exec(text))) {
+    const start=Math.max(0,m.index-500), end=Math.min(text.length,m.index+m[0].length+500);
+    add(m[0],text.slice(start,end));
+  }
+  // HTML hrefs, if proxy returned HTML
+  const href=/href=["'](\/pokemon\/[^"']+)["']/gi;
+  while((m=href.exec(text))){
+    const start=Math.max(0,m.index-700), end=Math.min(text.length,m.index+m[0].length+700);
+    add(m[1],text.slice(start,end));
+  }
+  return out;
+}
+function parseEuroPrice(s){
+  const x=String(s||'').replace(/\s+/g,' ').trim();
+  const m=x.match(/(\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)\s*€/);
+  if(!m)return null;
+  let raw=m[1].replace(/\s/g,'');
+  if(raw.includes(',') && raw.includes('.')){
+    if(raw.lastIndexOf(',')>raw.lastIndexOf('.')) raw=raw.replace(/\./g,'').replace(',','.');
+    else raw=raw.replace(/,/g,'');
+  }else if(raw.includes(',')){
+    raw=raw.replace(',','.');
+  }else if((raw.match(/\./g)||[]).length>1){
+    raw=raw.replace(/\./g,'');
+  }
+  const v=Number(raw);
+  return Number.isFinite(v)?v:null;
+}
+function parseLanguagePrice(text, language){
+  const wanted=LANG_LABELS[language]||language||'Spanish';
+  const labels=Object.values(LANG_LABELS);
+  const boundary=labels.filter(x=>x!==wanted).map(escRe).join('|');
+  const re=new RegExp(`${escRe(wanted)}\\s*\\|\\s*Europe\\s*\\|\\s*([^\\n|]+?€)`,`i`);
+  let m=String(text||'').match(re);
+  if(m){
+    const p=parseEuroPrice(m[1]);
+    if(p!=null)return {price:p,display:m[1].trim()};
+  }
+  // HTML-ish / proxy text where separators have been flattened.
+  const flat=cleanText(text);
+  const re2=new RegExp(`${escRe(wanted)}\\s+Europe\\s+([^|]{0,60}?€)`,`i`);
+  m=flat.match(re2);
+  if(m){
+    const p=parseEuroPrice(m[1]);
+    if(p!=null)return {price:p,display:m[1].trim()};
+  }
+  // Last safe fallback: only inspect a short window after the exact language
+  // and require Europe plus a euro price inside that window.
+  const idx=flat.toLowerCase().indexOf(String(wanted).toLowerCase());
+  if(idx>=0){
+    const win=flat.slice(idx,idx+180);
+    if(/\bEurope\b/i.test(win)){
+      const p=parseEuroPrice(win);
+      if(p!=null)return {price:p,display:win.match(/[\d.,\s]+\s*€/)?.[0]?.trim()||''};
+    }
+  }
   return null;
 }
-
-async function fetchTcggPage(url,steps){
+function directUrlFromKnown(nameEnglish,setName,number){
+  const slug=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/['’]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  if(!nameEnglish||!setName||!number)return '';
+  return `https://www.tcggo.com/pokemon/${slug(setName)}/${slug(nameEnglish)}-${rawNumber(number)}`;
+}
+async function fetchCardPage(url){
   const proxy='https://r.jina.ai/'+url;
-  try{
-    const r=await withTimeout(proxy,{headers:{Accept:'text/plain, text/markdown;q=0.9,*/*;q=0.8','User-Agent':'PokeScan/1.0'}},10000);
-    const text=await r.text();
-    addStep(steps,'6. TCGGO página','Proxy HTTP '+r.status+'; '+text.length+' caracteres',r.ok?'ok':'error');
-    if(!r.ok || text.length<200) return {ok:false,text};
-    return {ok:true,text};
-  }catch(e){
-    addStep(steps,'6. TCGGO página',e?.name==='AbortError'?'Timeout de 10 s consultando TCGGO.':(e?.message||'Error de red.'),'error');
-    return {ok:false,text:''};
+  const r=await fetchTimeout(proxy,{headers:{Accept:'text/plain'}},7000);
+  const text=await r.text();
+  return {status:r.status,text,url};
+}
+async function apiLookup({name,number,cardmarketId,code,steps,add}){
+  const key=String(process.env.TCGGO_API_KEY||'').trim();
+  if(!key)return null;
+  const params=new URLSearchParams();
+  if(name)params.set('name',name);
+  if(number)params.set('card_number',rawNumber(number));
+  if(cardmarketId)params.set('cardmarket_id',String(cardmarketId));
+  params.set('sort','relevance');
+  const url=`https://cardmarket-api-tcg.p.rapidapi.com/pokemon/cards/search?${params.toString()}`;
+  add('TCGGO API','Consultando la búsqueda oficial TCGGO (RapidAPI).');
+  const r=await fetchTimeout(url,{
+    headers:{'x-rapidapi-key':key,'x-rapidapi-host':'cardmarket-api-tcg.p.rapidapi.com',Accept:'application/json'}
+  },7000);
+  const j=await r.json().catch(()=>null);
+  steps.push({title:'API TCGGO',ok:r.ok&&!!j,detail:`HTTP ${r.status}`});
+  if(!r.ok || !j)return null;
+  const arr=Array.isArray(j?.data)?j.data:Array.isArray(j?.results)?j.results:[];
+  const exact=arr.find(c=>{
+    const cn=String(c?.card_number||c?.number||'').split('/')[0].trim();
+    const n=rawNumber(number);
+    const sameNum=cn===n || rawNumber(cn)===n;
+    const sameName=!name || norm(String(c?.name||''))===norm(name) || norm(String(c?.name||'')).includes(norm(name));
+    const sameCode=!code || norm(String(c?.episode?.code||c?.set?.code||''))===norm(code);
+    return sameNum && sameName && sameCode;
+  }) || arr.find(c=>rawNumber(c?.card_number)===rawNumber(number));
+  if(!exact)return null;
+  return {
+    id:exact.id||exact.tcggo_id||'',
+    url:exact.tcggo_url||exact.url||'',
+    name:exact.name||name,
+    cardNumber:exact.card_number||number,
+    cardmarketId:exact.cardmarket_id||exact.links?.cardmarket_id||cardmarketId||'',
+    source:'TCGGO API'
+  };
+}
+async function publicSearch({name,number,code,steps,add}){
+  const q1=`${code||''} ${rawNumber(number)}`.trim();
+  const q2=`${name||''} ${rawNumber(number)}`.trim();
+  // TCGGO's public catalog search is used only as a locator. No expansion
+  // mapping is involved. We try the generic Pokémon singles/search surfaces
+  // in parallel and validate the returned card by code + number.
+  const urls=[...new Set([
+    `https://www.tcggo.com/pokemon/singles?search=${encodeURIComponent(q1)}`,
+    `https://www.tcggo.com/pokemon/singles?search=${encodeURIComponent(q2)}`,
+    `https://www.tcggo.com/pokemon?search=${encodeURIComponent(q1)}`,
+    `https://www.tcggo.com/pokemon?search=${encodeURIComponent(q2)}`,
+    `https://www.tcggo.com/singles?search=${encodeURIComponent(q1)}`
+  ])];
+  add('Búsqueda TCGGO','Buscando por código+número/nombre+número, sin usar el nombre de la expansión.');
+  const results=await Promise.all(urls.map(async target=>{
+    try{
+      const r=await fetchCardPage(target);
+      return {target,...r};
+    }catch(e){return {target,status:0,text:'',error:e?.message||'timeout'};}
+  }));
+  for(const r of results){
+    const candidates=collectCandidates(r.text,code,number,name);
+    if(candidates.length){
+      steps.push({title:'Búsqueda pública',ok:true,detail:`Encontrada coincidencia en ${new URL(r.target).pathname}`});
+      return candidates[0].url;
+    }
   }
+  steps.push({title:'Búsqueda pública',ok:false,detail:'No devolvió una ficha exacta; se intenta la vía alternativa.'});
+  return '';
 }
-
-function directCandidates(setNameEnglish,nameEnglish,number){
-  const setSlug=slugify(setNameEnglish);
-  const nameSlug=slugify(nameEnglish);
-  const n=String(number||'').trim().split('/')[0];
-  if(!setSlug||!nameSlug||!n) return [];
-  const encodedName=encodeURIComponent(nameSlug+'-'+slugify(n));
-  const base='https://www.tcggo.com/pokemon/'+encodeURIComponent(setSlug)+'/';
-  return [
-    base+encodedName,
-    base+encodeURIComponent(nameSlug+'-'+String(n).toLowerCase())
-  ].filter((u,i,a)=>a.indexOf(u)===i);
-}
-
-async function handler(req,res){
+module.exports = async function handler(req,res){
   if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
   const steps=[];
-  const body=req.body||{};
-  const code=String(body.code||'').trim().toUpperCase();
-  const number=String(body.number||body.localId||'').trim().split('/')[0];
-  const nameEnglish=String(body.nameEnglish||body.cardmarketNameEnglish||'').trim();
-  const setNameEnglish=String(body.setNameEnglish||body.setName||body.expansionEnglish||'').trim();
-  const language=String(body.language||'Español').trim();
-  const wantedLabel=LANG_LABELS[language]||'Spanish';
+  const add=(title,detail,ok=null)=>steps.push({title,detail,ok});
+  try{
+    const b=req.body||{};
+    const code=String(b.code||b.setCode||'').trim().toUpperCase();
+    const number=String(b.number||b.collectorNumber||'').trim().split('/')[0];
+    const name=String(b.nameEnglish||b.name||'').trim();
+    const setName=String(b.setEnglish||b.set||'').trim();
+    const language=String(b.lang||b.language||'Español').trim();
+    const cardmarketId=String(b.cardmarketProductId||b.cardmarketId||'').trim();
+    if(!code||!number)return res.status(400).json({ok:false,error:'Faltan código y número.',steps});
+    add('Entrada',`${code} ${number} · ${language}`,true);
+    add('Identidad',`Código + número: ${code} ${number}`,true);
 
-  addStep(steps,'1. Entrada',`${code} ${number} · idioma ${language}`,'ok');
-  addStep(steps,'2. Identidad','Código + número son la identidad principal: '+code+' '+number,'ok');
-  addStep(steps,'3. Datos TCGdex',`${nameEnglish||'sin nombre inglés'} · ${setNameEnglish||'sin expansión inglesa'}`,nameEnglish&&setNameEnglish?'ok':'error');
-
-  if(!code||!number||!nameEnglish||!setNameEnglish){
-    return res.status(400).json({error:'Faltan datos dinámicos de TCGdex para consultar TCGGO.',steps});
-  }
-
-  const candidates=directCandidates(setNameEnglish,nameEnglish,number);
-  addStep(steps,'4. Ruta TCGGO','Construida dinámicamente: expansión + nombre inglés + número','info');
-  if(candidates.length===0)return res.status(404).json({error:'No se pudo construir la ruta TCGGO.',steps});
-
-  let finalUrl=''; let pageText='';
-  for(let i=0;i<candidates.length;i++){
-    const url=candidates[i];
-    addStep(steps,'5. Candidato '+(i+1),url,'info');
-    const page=await fetchTcggPage(url,steps);
-    if(!page.ok)continue;
-    const norm=page.text;
-    const codeMarker=new RegExp('(?:\\(|\\b)'+code.replace(/[.*+?^${}()|[\\]\\]/g,'\\$&')+'\\s*'+String(number).replace(/[.*+?^${}()|[\\]\\]/g,'\\$&')+'(?:\\)|\\b)','i');
-    const numberMarker=new RegExp('(?:Card number|'+code.replace(/[.*+?^${}()|[\\]\\]/g,'\\$&')+')\\s*[:#]?\\s*'+String(number).replace(/[.*+?^${}()|[\\]\\]/g,'\\$&'),'i');
-    if(codeMarker.test(norm)||numberMarker.test(norm)){
-      finalUrl=url;pageText=norm;
-      addStep(steps,'7. Carta encontrada','Coincide '+code+' '+number+' en la página individual.','ok');
-      break;
+    let card=null;
+    let cardPage=null;
+    try{card=await apiLookup({name,number,cardmarketId,code,steps,add});}catch(e){
+      steps.push({title:'API TCGGO',ok:false,detail:e?.message||'No disponible'});
     }
-    addStep(steps,'7. Carta encontrada','La página respondió, pero no contiene de forma verificable '+code+' '+number+'.','error');
+    if(card?.url){
+      add('TCGGO ficha','La API devolvió directamente la ficha exacta.',true);
+    }
+    if(!card?.url){
+      const direct=directUrlFromKnown(name,setName,number);
+      if(direct){
+        add('Ruta directa',direct);
+        try{
+          const page=await fetchCardPage(direct);
+          const valid=page.status===200 && identityMatches(page.text,code,number,name);
+          steps.push({title:'Ficha directa',ok:valid,detail:`HTTP ${page.status}; ${page.text.length} caracteres`});
+          if(valid){card={url:direct,name,cardNumber:number,source:'TCGGO direct'};cardPage=page;}
+        }catch(e){steps.push({title:'Ficha directa',ok:false,detail:e?.message||'timeout'});}
+      }
+    }
+    if(!card?.url){
+      const publicUrl=await publicSearch({name,number,code,steps,add});
+      if(publicUrl)card={url:publicUrl,name,cardNumber:number,source:'TCGGO public search'};
+    }
+    if(!card?.url){
+      return res.status(404).json({ok:false,error:`No se encontró ${code} ${number} en TCGGO mediante búsqueda directa.`,steps});
+    }
+    add('URL final',card.url,true);
+    const page=cardPage||await fetchCardPage(card.url);
+    if(!cardPage) steps.push({title:'Página TCGGO',ok:page.status===200,detail:`HTTP ${page.status}; ${page.text.length} caracteres`});
+    else steps.push({title:'Página TCGGO',ok:true,detail:`Ficha ya validada; ${page.text.length} caracteres`});
+    if(page.status!==200) return res.status(502).json({ok:false,error:'TCGGO no devolvió la ficha.',steps,url:card.url});
+    const identity=identityMatches(page.text,code,number,name);
+    steps.push({title:'Identidad ficha',ok:identity,detail:identity?`Coincide ${code} ${number}.`:'La ficha no contiene una coincidencia suficiente.'});
+    if(!identity)return res.status(409).json({ok:false,error:'La ficha encontrada no coincide exactamente con código+número.',steps,url:card.url});
+    const parsed=parseLanguagePrice(page.text,language);
+    if(!parsed){
+      return res.status(404).json({ok:false,error:`Se encontró ${code} ${number}, pero no el precio ${LANG_LABELS[language]||language} / Europe.`,steps,url:card.url});
+    }
+    steps.push({title:'Precio EU',ok:true,detail:`${LANG_LABELS[language]||language} · Europe · ${parsed.display}`,price:parsed.price});
+    return res.status(200).json({ok:true,price:parsed.price,priceDisplay:parsed.display,url:card.url,steps,source:'TCGGO'});
+  }catch(e){
+    return res.status(500).json({ok:false,error:e?.message||'Error interno TCGGO.',steps});
   }
-
-  if(!finalUrl){
-    return res.status(404).json({error:`TCGGO no confirmó ${code} ${number} mediante la ruta dinámica.`,steps});
-  }
-
-  const price=extractExactEuPrice(pageText,language,steps);
-  if(price==null){
-    return res.status(404).json({error:`TCGGO encontró ${code} ${number}, pero no tiene precio ${wantedLabel} / Europe en esa ficha.`,url:finalUrl,steps});
-  }
-
-  addStep(steps,'10. Resultado',`${price.toFixed(2)} € · ${language} / Europe`,'ok');
-  return res.status(200).json({price,language,region:'Europe',code,number,url:finalUrl,steps,source:'TCGGO'});
-}
-
-module.exports=handler;
+};
