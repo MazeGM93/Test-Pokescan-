@@ -3326,7 +3326,7 @@ async function updateTCGGOPrice(x){
   input.value=''; input.placeholder='Consultando TCGGO…';
   const renderTrace=(j)=>{if(!panel||!body)return;const rows=(j?.steps||[]).map(st=>{const icon=st.status==='OK'?'✅':st.status==='ERROR'?'❌':'ℹ️';let extra='';if(st.data){try{const d=JSON.stringify(st.data,null,2);extra='<details style="margin-top:3px"><summary>Ver detalle</summary><pre style="white-space:pre-wrap;max-height:220px;overflow:auto;font-size:10px">'+esc(d)+'</pre></details>'}catch(e){}}return '<div style="padding:5px 0;border-bottom:1px solid #e3e8f2"><b>'+icon+' '+esc(st.step)+'</b> — '+esc(st.detail||'')+extra+'</div>'}).join('');body.innerHTML=rows||'<div>Sin trazas.</div>'};
   try{
-    const params=new URLSearchParams({code,number,lang,nameEnglish:String(x?.cardmarketNameEnglish||x?.nameEnglish||'').trim(),name:String(x?.name||'').trim()});
+    const params=new URLSearchParams({code,number,lang,nameEnglish:String(x?.cardmarketNameEnglish||x?.nameEnglish||'').trim(),name:String(x?.name||'').trim(),setName:String(x?.set||x?.expansion||'').trim()});
     const r=await fetch('/api/tcggo-debug?'+params.toString(),{cache:'no-store'});
     let j={};try{j=await r.json()}catch(e){}
     if(requestId!==tcggoPriceRequestId)return;
