@@ -39,6 +39,16 @@ function norm(s){
 function rawNumber(n){
   return String(n||'').split('/')[0].trim().replace(/^0+/,'') || String(n||'').split('/')[0].trim();
 }
+// TCGGO's main search uses three digits for the affected promo/MEP codes.
+// Keep the existing price-resolution method intact; only normalize the query.
+function searchNumber(n){
+  const raw=String(n||'').split('/')[0].trim();
+  if(/^\d+$/.test(raw) && raw.length<3)return raw.padStart(3,'0');
+  return raw;
+}
+function searchCodeNumber(code,number){
+  return `${String(code||'').trim().toUpperCase()} ${searchNumber(number)}`.trim();
+}
 function identityMatches(text, code, number, name){
   const t=norm(text);
   const c=norm(code);
@@ -61,7 +71,7 @@ function absoluteTcggoUrl(href){
   try{
     const u=new URL(href,'https://www.tcggo.com');
     if(u.hostname!=='www.tcggo.com' && u.hostname!=='tcggo.com') return '';
-    if(!/^\/pokemon\//i.test(u.pathname)) return '';
+    if(!/^\/pokemon(?:-jp)?\//i.test(u.pathname)) return '';
     if(/\/singles(?:\/|$)/i.test(u.pathname)) return '';
     return u.toString();
   }catch(e){return '';}
@@ -78,19 +88,19 @@ function collectCandidates(text, code, number, name){
   };
   // Markdown links
   let m;
-  const md=/\]\((https?:\/\/(?:www\.)?tcggo\.com\/pokemon\/[^)\s]+)\)/gi;
+  const md=/\]\((https?:\/\/(?:www\.)?tcggo\.com\/pokemon(?:-jp)?\/[^)\s]+)\)/gi;
   while((m=md.exec(text))){
     const start=Math.max(0,m.index-500), end=Math.min(text.length,m.index+m[0].length+500);
     add(m[1],text.slice(start,end));
   }
   // Raw URLs
-  const raw=/https?:\/\/(?:www\.)?tcggo\.com\/pokemon\/[^\s)\]"']+/gi;
+  const raw=/https?:\/\/(?:www\.)?tcggo\.com\/pokemon(?:-jp)?\/[^\s)\]"']+/gi;
   while((m=raw.exec(text))) {
     const start=Math.max(0,m.index-500), end=Math.min(text.length,m.index+m[0].length+500);
     add(m[0],text.slice(start,end));
   }
   // HTML hrefs, if proxy returned HTML
-  const href=/href=["'](\/pokemon\/[^"']+)["']/gi;
+  const href=/href=[\"'](\/pokemon(?:-jp)?\/[^\"']+)[\"']/gi;
   while((m=href.exec(text))){
     const start=Math.max(0,m.index-700), end=Math.min(text.length,m.index+m[0].length+700);
     add(m[1],text.slice(start,end));
@@ -213,8 +223,8 @@ async function apiLookup({name,number,cardmarketId,code,steps,add}){
   };
 }
 async function publicSearch({name,number,code,steps,add}){
-  const q1=`${code||''} ${rawNumber(number)}`.trim();
-  const q2=`${name||''} ${rawNumber(number)}`.trim();
+  const q1=searchCodeNumber(code,number);
+  const q2=`${name||''} ${searchNumber(number)}`.trim();
   // TCGGO's public catalog search is used only as a locator. No expansion
   // mapping is involved. We try the generic Pokémon singles/search surfaces
   // in parallel and validate the returned card by code + number.
@@ -256,6 +266,7 @@ module.exports = async function handler(req,res){
     const cardmarketId=String(b.cardmarketProductId||b.cardmarketId||'').trim();
     if(!code||!number)return res.status(400).json({ok:false,error:'Faltan código y número.',steps});
     add('Entrada',`${code} ${number} · ${language}`,true);
+    add('Consulta TCGGO',`Código+número enviado al buscador: ${searchCodeNumber(code,number)}`,true);
     add('Identidad',`Código + número: ${code} ${number}`,true);
 
     let card=null;
