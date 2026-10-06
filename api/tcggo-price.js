@@ -164,18 +164,36 @@ function parseLanguagePrice(text, language){
   }
   return null;
 }
-function directUrlFromKnown(nameEnglish,setName,number){
+function directUrlFromKnown(nameEnglish,setName,number,language){
   const slug=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/['’]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
   if(!nameEnglish||!number)return '';
   if(!setName)return '';
-  return `https://www.tcggo.com/pokemon/${slug(setName)}/${slug(nameEnglish)}-${rawNumber(number)}`;
+  const root=String(language||'').trim()==='Japonés' ? 'pokemon-jp' : 'pokemon';
+  return `https://www.tcggo.com/${root}/${slug(setName)}/${slug(nameEnglish)}-${rawNumber(number)}`;
 }
 async function fetchCardPage(url){
   const proxy='https://r.jina.ai/'+url;
   const r=await fetchTimeout(proxy,{headers:{Accept:'text/plain'}},7000);
   const text=await r.text();
   return {status:r.status,text,url};
+}
+async function resolveJapaneseEnglishName(code,number){
+  try{
+    const c=String(code||'').trim().toUpperCase();
+    const n=rawNumber(number);
+    if(!c||!n)return '';
+    const lc=/^[A-Z]{1,4}\d+[A-Z]$/.test(c) ? c.slice(0,-1)+c.slice(-1).toLowerCase() : c;
+    const url=`https://limitlesstcg.com/cards/jp/${encodeURIComponent(lc)}/${encodeURIComponent(n)}?translate=en`;
+    const r=await fetchTimeout(url,{headers:{'User-Agent':'Mozilla/5.0 (compatible; PokeScan/1.0)','Accept':'text/html,application/xhtml+xml'}},7000);
+    if(!r.ok)return '';
+    const html=await r.text();
+    const strip=s=>String(s||'').replace(/<[^>]+>/g,' ').replace(/&amp;/gi,'&').replace(/&#39;|&#x27;/gi,"'").replace(/&quot;|&#x22;/gi,'"').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/\s+/g,' ').trim();
+    const m=html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+    let name=strip(m?.[1]||'');
+    name=name.replace(/\s*[-–—]\s*[^#]*#?\d+.*$/,'').trim();
+    return /[A-Za-z]/.test(name) ? name : '';
+  }catch(e){return '';}
 }
 async function apiLookup({name,number,cardmarketId,code,steps,add}){
   const key=String(process.env.TCGGO_API_KEY||'').trim();
@@ -250,9 +268,13 @@ module.exports = async function handler(req,res){
     const b=req.body||{};
     const code=String(b.code||b.setCode||'').trim().toUpperCase();
     const number=String(b.number||b.collectorNumber||'').trim().split('/')[0];
-    const name=String(b.nameEnglish||b.name||'').trim();
+    let name=String(b.nameEnglish||b.name||'').trim();
     const setName=String(b.setEnglish||b.tcggoSetEnglish||b.set||'').trim();
     const language=String(b.lang||b.language||'Español').trim();
+    if(language==='Japonés' && code && number){
+      const jpEnglish=await resolveJapaneseEnglishName(code,number);
+      if(jpEnglish) name=jpEnglish;
+    }
     const cardmarketId=String(b.cardmarketProductId||b.cardmarketId||'').trim();
     if(!code||!number)return res.status(400).json({ok:false,error:'Faltan código y número.',steps});
     add('Entrada',`${code} ${number} · ${language}`,true);
@@ -267,7 +289,7 @@ module.exports = async function handler(req,res){
       add('TCGGO ficha','La API devolvió directamente la ficha exacta.',true);
     }
     if(!card?.url){
-      const direct=directUrlFromKnown(name,setName,number);
+      const direct=directUrlFromKnown(name,setName,number,language);
       if(direct){
         add('Ruta directa',direct);
         try{
