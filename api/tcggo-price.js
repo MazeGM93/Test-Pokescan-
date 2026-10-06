@@ -24,6 +24,10 @@ function cleanText(s){
   return String(s||'')
     .replace(/&amp;/gi,'&').replace(/&#39;|&#x27;/gi,"'")
     .replace(/&quot;|&#x22;/gi,'"').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>')
+    .replace(/&euro;|&#8364;|&#x20ac;/gi,'€')
+    .replace(/\u00a0/g,' ')
+    .replace(/<br\s*\/?>(?=.)/gi,'\n')
+    .replace(/<[^>]+>/g,' ')
     .replace(/\s+/g,' ').trim();
 }
 function escRe(s){return String(s||'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
@@ -94,8 +98,13 @@ function collectCandidates(text, code, number, name){
   return out;
 }
 function parseEuroPrice(s){
-  const x=String(s||'').replace(/\s+/g,' ').trim();
-  const m=x.match(/(\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)\s*€/);
+  const x=String(s||'').replace(/\u00a0/g,' ').replace(/&euro;|&#8364;|&#x20ac;/gi,'€').replace(/\s+/g,' ').trim();
+  const patterns=[
+    /€\s*(\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)/,
+    /(\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)\s*€/
+  ];
+  let m=null;
+  for(const re of patterns){m=x.match(re);if(m)break;}
   if(!m)return null;
   let raw=m[1].replace(/\s/g,'');
   if(raw.includes(',') && raw.includes('.')){
@@ -111,38 +120,55 @@ function parseEuroPrice(s){
 }
 function parseLanguagePrice(text, language){
   const wanted=LANG_LABELS[language]||language||'Spanish';
-  const labels=Object.values(LANG_LABELS);
-  const boundary=labels.filter(x=>x!==wanted).map(escRe).join('|');
-  const re=new RegExp(`${escRe(wanted)}\\s*\\|\\s*Europe\\s*\\|\\s*([^\\n|]+?€)`,`i`);
-  let m=String(text||'').match(re);
+  const source=String(text||'');
+  // 1) Preserve line/row boundaries when Jina returns Markdown/HTML-like tables.
+  const htmlish=source.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ');
+  const normalized=htmlish
+    .replace(/&euro;|&#8364;|&#x20ac;/gi,'€')
+    .replace(/&nbsp;|\u00a0/gi,' ')
+    .replace(/<br\s*\/?>(?=.)/gi,'\n')
+    .replace(/<[^>]+>/g,' ')
+    .replace(/\r/g,'');
+  const wantedRe=escRe(wanted);
+  const priceRe='(?:€\s*)?(\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)\s*€';
+  // Exact table-row style, allowing pipes, tabs or newlines between columns.
+  const rowRe=new RegExp(`${wantedRe}[^\n|]{0,80}[|\t\n ]+[^\n|]{0,80}Europe[^\n|]{0,100}${priceRe}|${wantedRe}[^\n|]{0,80}Europe[^\n|]{0,120}${priceRe}`,'i');
+  let m=normalized.match(rowRe);
   if(m){
-    const p=parseEuroPrice(m[1]);
-    if(p!=null)return {price:p,display:m[1].trim()};
+    const p=parseEuroPrice(m[0]);
+    if(p!=null)return {price:p,display:(m[0].match(/(?:€\s*)?\d[\d.,\s]*\s*€/i)||[])[0]?.trim()||`${p} €`};
   }
-  // HTML-ish / proxy text where separators have been flattened.
-  const flat=cleanText(text);
-  const re2=new RegExp(`${escRe(wanted)}\\s+Europe\\s+([^|]{0,60}?€)`,`i`);
-  m=flat.match(re2);
-  if(m){
-    const p=parseEuroPrice(m[1]);
-    if(p!=null)return {price:p,display:m[1].trim()};
-  }
-  // Last safe fallback: only inspect a short window after the exact language
-  // and require Europe plus a euro price inside that window.
-  const idx=flat.toLowerCase().indexOf(String(wanted).toLowerCase());
-  if(idx>=0){
-    const win=flat.slice(idx,idx+180);
-    if(/\bEurope\b/i.test(win)){
-      const p=parseEuroPrice(win);
-      if(p!=null)return {price:p,display:win.match(/[\d.,\s]+\s*€/)?.[0]?.trim()||''};
+  // 2) Flattened Markdown/text: language -> Europe -> price within a tight window.
+  const flat=cleanText(normalized).replace(/[|*`]+/g,' ');
+  const lower=flat.toLowerCase();
+  let pos=0;
+  while((pos=lower.indexOf(String(wanted).toLowerCase(),pos))>=0){
+    const win=flat.slice(pos,pos+700);
+    const e=win.match(/\bEurope\b/i);
+    if(e){
+      const after=win.slice(e.index+e[0].length,e.index+e[0].length+180);
+      const p=parseEuroPrice(after);
+      if(p!=null){
+        const dm=after.match(/(?:€\s*)?\d[\d.,\s]*\s*€/i);
+        return {price:p,display:dm?dm[0].trim():`${p} €`};
+      }
     }
+    pos+=String(wanted).length;
+  }
+  // 3) Reverse layout fallback: Europe -> language -> price in the same short row.
+  const revRe=new RegExp(`Europe[^\n|]{0,100}${wantedRe}[^\n|]{0,120}${priceRe}`,'i');
+  m=normalized.match(revRe);
+  if(m){
+    const p=parseEuroPrice(m[0]);
+    if(p!=null)return {price:p,display:(m[0].match(/(?:€\s*)?\d[\d.,\s]*\s*€/i)||[])[0]?.trim()||`${p} €`};
   }
   return null;
 }
 function directUrlFromKnown(nameEnglish,setName,number){
   const slug=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/['’]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
-  if(!nameEnglish||!setName||!number)return '';
+  if(!nameEnglish||!number)return '';
+  if(!setName)return '';
   return `https://www.tcggo.com/pokemon/${slug(setName)}/${slug(nameEnglish)}-${rawNumber(number)}`;
 }
 async function fetchCardPage(url){
@@ -225,7 +251,7 @@ module.exports = async function handler(req,res){
     const code=String(b.code||b.setCode||'').trim().toUpperCase();
     const number=String(b.number||b.collectorNumber||'').trim().split('/')[0];
     const name=String(b.nameEnglish||b.name||'').trim();
-    const setName=String(b.setEnglish||b.set||'').trim();
+    const setName=String(b.setEnglish||b.tcggoSetEnglish||b.set||'').trim();
     const language=String(b.lang||b.language||'Español').trim();
     const cardmarketId=String(b.cardmarketProductId||b.cardmarketId||'').trim();
     if(!code||!number)return res.status(400).json({ok:false,error:'Faltan código y número.',steps});
