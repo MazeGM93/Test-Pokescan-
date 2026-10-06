@@ -1301,7 +1301,7 @@ function fillRecognition(x){
   setTimeout(()=>document.getElementById('result')?.scrollIntoView({behavior:'smooth',block:'start'}),30);
   // En segundo plano buscamos una imagen/expansión de respaldo en TCGdex sin bloquear el escaneo.
   if(currentKind==='card' || currentKind==='graded'){
-    window.cardEnrichPromise=enrichCardFromTCGdex(x).then(y=>{
+    window.cardEnrichPromise=enrichCardFromTCGdex(x).then(async y=>{
       if(!y)return;
       // El nombre y la expansión salen de la búsqueda exacta código+número.
       // Gemini solo aporta código, número e idioma.
