@@ -9,7 +9,7 @@ module.exports = async function handler(req, res) {
     if(!code || !number) return res.status(400).json({error:'Faltan código y número.'});
 
     const n=String(number).replace(/^0+/,'')||number;
-    const url='https://limitlesstcg.com/cards/jp/'+encodeURIComponent(code)+'/'+encodeURIComponent(n)+'?translate=en';
+    const url='https://limitlesstcg.com/cards/jp/'+encodeURIComponent(code)+'/'+encodeURIComponent(n);
     const r=await fetch(url,{
       headers:{'User-Agent':'Mozilla/5.0 (compatible; PokeScan/1.0)','Accept':'text/html,application/xhtml+xml'},
       cache:'no-store'
@@ -24,27 +24,15 @@ module.exports = async function handler(req, res) {
       .replace(/\s+/g,' ').trim();
 
     const h1m=html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-    let translated=strip(h1m?.[1]||'');
-    translated=translated.replace(/\s*[-–—]\s*(?:Fire|Water|Grass|Lightning|Psychic|Fighting|Darkness|Metal|Fairy|Colorless|Dragon)[^#]*#?\d+.*$/i,'').trim();
-    // Limitless with ?translate=en gives the English card name in the H1.
-    // Keep a Japanese-name field too when the page exposes it, so the scanner UI is unchanged.
-    let nameEnglish=translated.replace(/\s*[-–—]\s*[^#]*#?\d+.*$/,'').trim();
-    if(!nameEnglish) nameEnglish=translated;
-    let name=nameEnglish;
-    const jpTitle=html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    const titleText=strip(jpTitle?.[1]||'');
-    if(titleText && /[\u3040-\u30ff\u3400-\u9fff]/.test(titleText)) {
-      const first=titleText.split(' - ')[0].trim();
-      if(first) name=first;
-    }
-    if(!nameEnglish) return res.status(404).json({error:'Nombre no encontrado.'});
+    let name=strip(h1m?.[1]||'');
+    name=name.replace(/\s*[-–—]\s*(?:[A-Za-z][^<]*?)?\s*\([^)]*\)\s*#?\d+.*$/,'').trim();
+    if(!name) return res.status(404).json({error:'Nombre no encontrado.'});
 
     const im=html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
       || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
 
     return res.status(200).json({
       name,
-      nameEnglish,
       imageUrl:im?.[1]||'',
       source:'Limitless JP',
       sourceUrl:url

@@ -135,7 +135,16 @@ module.exports = async function handler(req, res) {
                 }catch(e){}
               }
               const cardmarketProductId=String(card?.pricing?.cardmarket?.idProduct||card?.thirdParty?.cardmarket||'').trim();
-              return res.status(200).json({...card,image,imageUrl:imageUrl||image,cardmarketProductId,cardmarketNameEnglish:englishName,source:'TCGdex',sourceUrl:url});
+              // Para cartas japonesas, TCGdex puede devolver la carta correctamente pero
+              // su idProduct de Cardmarket puede apuntar a otra impresión/idioma. Buscamos
+              // además la ficha individual por código+número y guardamos ese enlace exacto.
+              let cardmarketExactUrl='';
+              const isJapanese=String(lang).toLowerCase()==='ja' || /^SV-P$/.test(code) || /^[A-Z]{1,4}\d+[A-Z]$/.test(code);
+              if(isJapanese){
+                const cm=await findCardmarketExact(code,cleanNum,'ja');
+                if(cm?.cardmarketExactUrl) cardmarketExactUrl=cm.cardmarketExactUrl;
+              }
+              return res.status(200).json({...card,image,imageUrl:imageUrl||image,cardmarketProductId,cardmarketExactUrl,cardmarketNameEnglish:englishName,source:'TCGdex',sourceUrl:url});
             }
           }catch(e){}
         }
