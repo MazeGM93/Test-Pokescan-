@@ -125,17 +125,20 @@ module.exports = async function handler(req, res) {
               const image=String(card.image||'').trim();
               const imageUrl=await resolveTcgdexImage(image);
               let englishName=String(card.name||'').trim();
-              // Si la búsqueda preferida fue español, recuperamos también el nombre
-              // inglés para construir slugs exactos de Cardmarket cuando sea posible.
-              if(String(lang).toLowerCase()!=='en'){
-                try{
-                  const enUrl=`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(discoveredSetId+'-'+cleanNum)}`;
-                  const er=await fetch(enUrl,{headers:{Accept:'application/json'},cache:'no-store'});
-                  if(er.ok){const ec=await er.json();if(ec&&String(ec.name||'').trim())englishName=String(ec.name).trim();}
-                }catch(e){}
-              }
+              let setNameEnglish=String(card?.set?.name||discoveredSetName||'').trim();
+              // TCGGO usa el nombre inglés para construir la ruta de la carta.
+              // Lo obtenemos directamente de TCGdex; no mantenemos ninguna tabla propia.
+              try{
+                const enUrl=`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(discoveredSetId+'-'+cleanNum)}`;
+                const er=await fetch(enUrl,{headers:{Accept:'application/json'},cache:'no-store'});
+                if(er.ok){
+                  const ec=await er.json();
+                  if(ec&&String(ec.name||'').trim())englishName=String(ec.name).trim();
+                  if(ec?.set?.name) setNameEnglish=String(ec.set.name).trim();
+                }
+              }catch(e){}
               const cardmarketProductId=String(card?.pricing?.cardmarket?.idProduct||card?.thirdParty?.cardmarket||'').trim();
-              return res.status(200).json({...card,image,imageUrl:imageUrl||image,cardmarketProductId,cardmarketNameEnglish:englishName,source:'TCGdex',sourceUrl:url});
+              return res.status(200).json({...card,image,imageUrl:imageUrl||image,cardmarketProductId,cardmarketNameEnglish:englishName,setNameEnglish,source:'TCGdex',sourceUrl:url});
             }
           }catch(e){}
         }
