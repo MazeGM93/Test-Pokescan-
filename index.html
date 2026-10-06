@@ -3526,7 +3526,7 @@ async function fetchPriceChartingIndicativePrice(id){
     if(lang==='Japonés' && code && number){
       try{
         const jpHit=await fetchJapaneseScannerName(code,number);
-        if(jpHit?.englishName) nameEnglish=String(jpHit.englishName).trim();
+        if(jpHit?.nameEnglish) nameEnglish=String(jpHit.nameEnglish).trim();
       }catch(e){}
     }
     if(!code||!number)return;
