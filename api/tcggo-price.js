@@ -61,7 +61,7 @@ function absoluteTcggoUrl(href){
   try{
     const u=new URL(href,'https://www.tcggo.com');
     if(u.hostname!=='www.tcggo.com' && u.hostname!=='tcggo.com') return '';
-    if(!/^\/pokemon(?:-jp)?\//i.test(u.pathname)) return '';
+    if(!/^\/pokemon\//i.test(u.pathname)) return '';
     if(/\/singles(?:\/|$)/i.test(u.pathname)) return '';
     return u.toString();
   }catch(e){return '';}
@@ -164,31 +164,25 @@ function parseLanguagePrice(text, language){
   }
   return null;
 }
-function searchNumberVariants(code, number){
-  const raw=String(number||'').split('/')[0].trim();
-  const out=[];
-  const add=v=>{v=String(v||'').trim(); if(v && !out.includes(v)) out.push(v);};
-  add(raw);
-  // Only the promo families explicitly known to require a leading zero are
-  // normalized. Do NOT pad ordinary Japanese numbers such as SV9A 77 here.
-  if(/^MEP$/i.test(code) || /^SVP$/i.test(code)){
-    const digits=raw.replace(/^0+/,'');
-    if(/^\d{1,2}$/.test(digits)) add(digits.padStart(3,'0'));
-  }
-  // TCGGO's main search accepts both forms for Japanese collector numbers.
-  // Try the zero-padded form as a second query without changing the card's
-  // stored number.
-  if(/^SV[A-Z0-9]*$/i.test(code)){
-    const digits=raw.replace(/^0+/,'');
-    if(/^\d{1,2}$/.test(digits)) add(digits.padStart(3,'0'));
-  }
-  return out;
-}
-
-function directUrlFromKnown(nameEnglish,setName,number){
+function directUrlFromKnown(nameEnglish,setName,number,code,language){
   const slug=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/['’]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
   if(!nameEnglish||!number)return '';
+
+  // Las japonesas usan exactamente la misma ruta directa que inglés/español.
+  // La única diferencia es el catálogo de TCGGO: /pokemon-jp/.
+  if(String(language||'').trim()==='Japonés'){
+    const c=String(code||'').trim().toUpperCase();
+    // Nombres de set que no coinciden literalmente con el slug de TCGGO.
+    const jpSetSlug={
+      SV9A:'hot-air-arena',
+      M6:'storm-emeralda'
+    };
+    const setSlug=jpSetSlug[c]||slug(setName);
+    if(!setSlug)return '';
+    return `https://www.tcggo.com/pokemon-jp/${setSlug}/${slug(nameEnglish)}-${rawNumber(number)}`;
+  }
+
   if(!setName)return '';
   return `https://www.tcggo.com/pokemon/${slug(setName)}/${slug(nameEnglish)}-${rawNumber(number)}`;
 }
@@ -234,72 +228,35 @@ async function apiLookup({name,number,cardmarketId,code,steps,add}){
   };
 }
 async function publicSearch({name,number,code,steps,add}){
-  const nums=searchNumberVariants(code,number);
-  const queries=[];
-  for(const n of nums){
-    const q1=`${code||''} ${n}`.trim();
-    const q2=`${name||''} ${n}`.trim();
-    // Main TCGGO search first. This is the same public search a user sees.
-    queries.push(`https://www.tcggo.com/pokemon?search=${encodeURIComponent(q1)}`);
-    if(name) queries.push(`https://www.tcggo.com/pokemon?search=${encodeURIComponent(q2)}`);
-  }
-  // Keep the Japanese main-search surface only as a fallback for cases where
-  // the general Pokémon search does not expose the Japanese card link.
-  for(const n of nums){
-    const q1=`${code||''} ${n}`.trim();
-    queries.push(`https://www.tcggo.com/pokemon-jp?search=${encodeURIComponent(q1)}`);
-  }
-
-  add('Búsqueda TCGGO',`Buscando en el buscador principal: ${queries.slice(0,3).map(u=>decodeURIComponent(new URL(u).searchParams.get('search')||'')).join(' · ')}`);
-
-  const results=await Promise.all([...new Set(queries)].map(async target=>{
+  const q1=`${code||''} ${rawNumber(number)}`.trim();
+  const q2=`${name||''} ${rawNumber(number)}`.trim();
+  // TCGGO's public catalog search is used only as a locator. No expansion
+  // mapping is involved. We try the generic Pokémon singles/search surfaces
+  // in parallel and validate the returned card by code + number.
+  const urls=[...new Set([
+    `https://www.tcggo.com/pokemon/singles?search=${encodeURIComponent(q1)}`,
+    `https://www.tcggo.com/pokemon/singles?search=${encodeURIComponent(q2)}`,
+    `https://www.tcggo.com/pokemon?search=${encodeURIComponent(q1)}`,
+    `https://www.tcggo.com/pokemon?search=${encodeURIComponent(q2)}`,
+    `https://www.tcggo.com/singles?search=${encodeURIComponent(q1)}`
+  ])];
+  add('Búsqueda TCGGO','Buscando por código+número/nombre+número, sin usar el nombre de la expansión.');
+  const results=await Promise.all(urls.map(async target=>{
     try{
       const r=await fetchCardPage(target);
       return {target,...r};
-    }catch(e){
-      return {target,status:0,text:'',error:e?.message||'timeout'};
-    }
+    }catch(e){return {target,status:0,text:'',error:e?.message||'timeout'};}
   }));
-
-  // First pass: only actual TCGGO card links, never product links.
   for(const r of results){
     const candidates=collectCandidates(r.text,code,number,name);
     if(candidates.length){
-      steps.push({
-        title:'Carta encontrada',
-        ok:true,
-        detail:`Primera ficha de carta válida: ${candidates[0].url}`
-      });
+      steps.push({title:'Búsqueda pública',ok:true,detail:`Encontrada coincidencia en ${new URL(r.target).pathname}`});
       return candidates[0].url;
     }
   }
-
-  // Second pass: if the result page uses different formatting, look for any
-  // TCGGO card URL near the requested code/number, tolerating 77 vs 077.
-  const targetNums=nums.map(rawNumber);
-  for(const r of results){
-    const re=/https?:\/\/(?:www\.)?tcggo\.com\/pokemon(?:-jp)?\/[^\s)"'<]+/gi;
-    let m;
-    while((m=re.exec(r.text))){
-      const u=m[0];
-      const context=r.text.slice(Math.max(0,m.index-800),Math.min(r.text.length,m.index+1200));
-      const compact=norm(context).replace(/\s+/g,'');
-      const codeOk=compact.includes(norm(code));
-      const numOk=targetNums.some(n=>compact.includes(norm(`${code} ${n}`).replace(/\s+/g,'')));
-      if(codeOk && numOk){
-        const abs=absoluteTcggoUrl(u);
-        if(abs){
-          steps.push({title:'Carta encontrada',ok:true,detail:`Coincidencia de carta por código/número: ${abs}`});
-          return abs;
-        }
-      }
-    }
-  }
-
-  steps.push({title:'Búsqueda pública',ok:false,detail:`No se encontró una ficha de carta para ${code} ${number}.`});
+  steps.push({title:'Búsqueda pública',ok:false,detail:'No devolvió una ficha exacta; se intenta la vía alternativa.'});
   return '';
 }
-
 module.exports = async function handler(req,res){
   if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
   const steps=[];
@@ -315,8 +272,6 @@ module.exports = async function handler(req,res){
     if(!code||!number)return res.status(400).json({ok:false,error:'Faltan código y número.',steps});
     add('Entrada',`${code} ${number} · ${language}`,true);
     add('Identidad',`Código + número: ${code} ${number}`,true);
-    const searchNums=searchNumberVariants(code,number);
-    add('Consulta',`TCGGO probará: ${searchNums.map(n=>`${code} ${n}`).join(' · ')}`,true);
 
     let card=null;
     let cardPage=null;
@@ -327,8 +282,7 @@ module.exports = async function handler(req,res){
       add('TCGGO ficha','La API devolvió directamente la ficha exacta.',true);
     }
     if(!card?.url){
-      const useDirect = !/^MEP$/i.test(code) && !/^SVP$/i.test(code) && !/^SV9A$/i.test(code);
-      const direct=useDirect ? directUrlFromKnown(name,setName,number) : '';
+      const direct=directUrlFromKnown(name,setName,number,code,language);
       if(direct){
         add('Ruta directa',direct);
         try{
