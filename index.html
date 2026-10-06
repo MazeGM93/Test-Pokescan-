@@ -829,6 +829,21 @@ function buildCardmarketSearchUrl(x){
   const exact=buildCardmarketExactUrl({...x,kind});
   if(exact) return exact;
   const languageId=cardmarketLanguageIdFor(x);
+  // Cardmarket es muy sensible al formato del código japonés.
+  // Para JP no concatenamos SV9A+77: usamos SV9A 077, que es como aparece
+  // en la ficha de Cardmarket (sv9a 077). Esto evita la pantalla "No hay resultados".
+  const jpCode=String(x?.set_code||x?.expansion_code||x?.code||'').trim().toUpperCase();
+  const jpNumber=String(x?.number||x?.collector_number||'').split('/')[0].trim();
+  const japanese=typeof isJapaneseSetCode==='function' && isJapaneseSetCode(jpCode);
+  if(japanese && jpNumber){
+    const padded=jpNumber.replace(/^0+/,'').padStart(3,'0');
+    // Cardmarket indexa muchas cartas japonesas por el nombre internacional,
+    // no por el nombre japonés impreso. Usamos el nombre inglés recuperado por
+    // TCGdex/Limitless y el número como respaldo si no se encontró una ficha exacta.
+    const englishName=String(x?.cardmarketNameEnglish||'').trim();
+    const jpQuery=englishName ? (englishName+' '+String(jpNumber).replace(/^0+/,'')) : (jpCode+' '+padded);
+    return 'https://www.cardmarket.com/es/Pokemon/Products/Search?searchString='+encodeURIComponent(jpQuery)+'&searchMode=v2&mode=gallery&language=7';
+  }
   return 'https://www.cardmarket.com/es/Pokemon/Products/Search?searchString='+encodeURIComponent(query)+'&searchMode=v2&mode=gallery&language='+languageId;
 }
 function inferCardmarketCode(x){
@@ -1158,7 +1173,7 @@ async function fetchJapaneseScannerName(code, number){
     const r=await fetch('/api/jp-card-name',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({code:jpCode,number:n})
+      body:JSON.stringify({code:jpCode,number:n,englishName:String(window.lastRecognition?.cardmarketNameEnglish||'').trim()})
     });
     if(!r.ok) return null;
     const j=await r.json();
