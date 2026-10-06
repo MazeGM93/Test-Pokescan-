@@ -164,26 +164,45 @@ function parseLanguagePrice(text, language){
   }
   return null;
 }
-function directUrlFromKnown(nameEnglish,setName,number,code,language){
+async function resolveJapaneseEnglishName(code,number,fallback=''){
+  const c=String(code||'').trim().toLowerCase();
+  const n=String(number||'').split('/')[0].trim();
+  if(!c||!n)return String(fallback||'').trim();
+  const ids=[`${c}-${n}`,`${c}-${String(n).replace(/^0+/,'')||n}`].filter((v,i,a)=>v&&a.indexOf(v)===i);
+  for(const id of ids){
+    try{
+      const r=await fetchTimeout(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(id)}`,{headers:{Accept:'application/json'}},5000);
+      if(!r.ok)continue;
+      const j=await r.json().catch(()=>null);
+      const name=String(j?.name||'').trim();
+      if(name)return name;
+    }catch(e){}
+  }
+  return String(fallback||'').trim();
+}
+
+async function directUrlFromKnown(nameEnglish,setName,number,code,language){
   const slug=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/['’]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
-  if(!nameEnglish||!number)return '';
+  if(!number)return '';
 
-  // Las japonesas usan exactamente la misma ruta directa que inglés/español.
-  // La única diferencia es el catálogo de TCGGO: /pokemon-jp/.
   if(String(language||'').trim()==='Japonés'){
     const c=String(code||'').trim().toUpperCase();
-    // Nombres de set que no coinciden literalmente con el slug de TCGGO.
     const jpSetSlug={
-      SV9A:'hot-air-arena',
-      M6:'storm-emeralda'
+      SV9A:'hot-air-arena'
     };
     const setSlug=jpSetSlug[c]||slug(setName);
     if(!setSlug)return '';
-    return `https://www.tcggo.com/pokemon-jp/${setSlug}/${slug(nameEnglish)}-${rawNumber(number)}`;
+
+    // Para Japón no confiamos en el nombre que venga de la ficha previa:
+    // recuperamos el nombre inglés por código+número y usamos exactamente
+    // el mismo constructor de URL que ya funciona para inglés/español.
+    const resolvedName=await resolveJapaneseEnglishName(c,number,nameEnglish);
+    if(!resolvedName || norm(resolvedName).length<3)return '';
+    return `https://www.tcggo.com/pokemon-jp/${setSlug}/${slug(resolvedName)}-${rawNumber(number)}`;
   }
 
-  if(!setName)return '';
+  if(!setName||!nameEnglish)return '';
   return `https://www.tcggo.com/pokemon/${slug(setName)}/${slug(nameEnglish)}-${rawNumber(number)}`;
 }
 async function fetchCardPage(url){
@@ -282,7 +301,7 @@ module.exports = async function handler(req,res){
       add('TCGGO ficha','La API devolvió directamente la ficha exacta.',true);
     }
     if(!card?.url){
-      const direct=directUrlFromKnown(name,setName,number,code,language);
+      const direct=await directUrlFromKnown(name,setName,number,code,language);
       if(direct){
         add('Ruta directa',direct);
         try{
