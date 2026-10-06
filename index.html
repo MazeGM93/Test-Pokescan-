@@ -1018,10 +1018,15 @@ async function applyManualCardCode(inputId){
       // Si TCGdex no entregó el nombre inglés pero la carta es japonesa,
       // usamos Limitless como respaldo. Así SV9A 77 termina mostrando
       // "Ethan's Ho-Oh ex" y Cardmarket puede buscar por ese nombre.
-      if(japaneseCode && (!x.cardmarketNameEnglish || containsJapaneseText(x.cardmarketNameEnglish))){
-        const jpFallback=await fetchJapaneseScannerName(parsed.code,target);
-        if(jpFallback?.name && !containsJapaneseText(jpFallback.name)){
-          x.cardmarketNameEnglish=String(jpFallback.name).trim();
+      if(japaneseCode){
+        // Nunca dejamos el nombre japonés como nombre final. Para cualquier
+        // expansión japonesa recuperamos el nombre internacional y lo usamos
+        // para Cardmarket (p. ej. SV9A 77 -> Ethan's Ho-Oh ex).
+        const enName=await fetchJapaneseEnglishName(parsed.code,target);
+        if(enName){
+          x.cardmarketNameEnglish=enName;
+          x.name=enName;
+        }else if(x.cardmarketNameEnglish && !containsJapaneseText(x.cardmarketNameEnglish)){
           x.name=x.cardmarketNameEnglish;
         }
       }
@@ -1184,8 +1189,6 @@ async function fetchJapaneseScannerName(code, number){
     const rawCode=String(code||'').trim().toUpperCase();
     const rawNum=String(number||'').trim().split('/')[0];
     if(!rawCode || !rawNum || rawCode==='SV-P') return null;
-    // Limitless usa la última letra en minúscula en los códigos japoneses
-    // (SV5a, SV9a, etc.). Los códigos sin letra final se conservan.
     const jpCode=/^[A-Z]{1,4}\d+[A-Z]$/.test(rawCode)
       ? rawCode.slice(0,-1)+rawCode.slice(-1).toLowerCase()
       : rawCode;
@@ -1198,6 +1201,29 @@ async function fetchJapaneseScannerName(code, number){
     if(!r.ok) return null;
     const j=await r.json();
     return j?.name ? j : null;
+  }catch(e){ return null; }
+}
+
+// Para TODAS las japonesas: recupera el nombre internacional que utiliza
+// Cardmarket. El nombre japonés se conserva solo como dato de origen; la ficha
+// visible y la búsqueda de Cardmarket usan el nombre inglés.
+async function fetchJapaneseEnglishName(code, number){
+  try{
+    const rawCode=String(code||'').trim().toUpperCase();
+    const rawNum=String(number||'').trim().split('/')[0];
+    if(!rawCode || !rawNum || rawCode==='SV-P') return null;
+    const jpCode=/^[A-Z]{1,4}\d+[A-Z]$/.test(rawCode)
+      ? rawCode.slice(0,-1)+rawCode.slice(-1).toLowerCase()
+      : rawCode;
+    const n=String(rawNum).replace(/^0+/,'')||rawNum;
+    const r=await fetch('/api/jp-card-name',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:jpCode,number:n})
+    });
+    if(!r.ok) return null;
+    const j=await r.json();
+    return j?.englishName && !containsJapaneseText(j.englishName) ? String(j.englishName).trim() : null;
   }catch(e){ return null; }
 }
 function containsJapaneseText(value){
@@ -1246,6 +1272,11 @@ async function enrichCardFromTCGdex(x){
           if(cmId)x.cardmarketProductId=String(cmId);
           if(hit.imageUrl||hit.image) x.imageUrl=String(hit.imageUrl||hit.image).trim();
           if(hit.cardmarketNameEnglish)x.cardmarketNameEnglish=String(hit.cardmarketNameEnglish).trim();
+          if(japaneseCode){
+            const enName=await fetchJapaneseEnglishName(code,target);
+            if(enName) x.cardmarketNameEnglish=enName;
+            if(x.cardmarketNameEnglish && !containsJapaneseText(x.cardmarketNameEnglish)) x.name=x.cardmarketNameEnglish;
+          }
           x.source=String(hit.source||x.source||'').trim();
           x.sourceUrl=String(hit.sourceUrl||x.sourceUrl||'').trim();
           x.language_code=langCode; x.lang=selectedLang;
