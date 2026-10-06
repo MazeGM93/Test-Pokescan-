@@ -3090,9 +3090,14 @@ async function resolveGradedCode(){
   if(!parsed){alert('Escribe código + número, por ejemplo PFL 213, DRI 218 o SV10 001. También admite SV10/001.');return;}
 
   const japaneseCode=isJapaneseSetCode(parsed.code);
+  const langSel=document.getElementById('gradedLang');
   if(japaneseCode){
-    const langSel=document.getElementById('gradedLang');
+    // A Japanese code selects Japanese automatically. For a new western
+    // manual code, never inherit Japanese from the previous card: default to
+    // Spanish while keeping an explicitly selected English/Spanish value.
     if(langSel) langSel.value='Japonés';
+  }else if(langSel && langSel.value==='Japonés'){
+    langSel.value='Español';
   }
 
   const parsedNum=String(parsed.number).split('/')[0].trim();
