@@ -1,11 +1,48 @@
 
-async function findCardmarketExact(code, number, preferredLang='en') {
+
+async function findLimitlessEnglishName(code, number) {
+  const c=String(code||'').trim().toUpperCase();
+  const n=String(number||'').split('/')[0].trim().replace(/^0+/,'') || String(number||'').trim();
+  if(!c||!n) return '';
+  const urls=[
+    `https://limitlesstcg.com/cards/en/${encodeURIComponent(c)}/${encodeURIComponent(n)}`,
+    `https://limitlesstcg.com/cards/${encodeURIComponent(c)}/${encodeURIComponent(n)}`
+  ];
+  for(const url of urls){
+    try{
+      const r=await fetch(url,{headers:{'User-Agent':'Mozilla/5.0 (compatible; PokeScan/1.0)','Accept':'text/html,application/xhtml+xml'},cache:'no-store'});
+      if(!r.ok) continue;
+      const html=await r.text();
+      const m=html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+      let name=String(m?.[1]||'').replace(/<[^>]+>/g,' ').replace(/&amp;/gi,'&').replace(/&#39;|&#x27;/gi,"'").replace(/&quot;|&#x22;/gi,'"').replace(/\s+/g,' ').trim();
+      name=name.replace(/\s*[-–—]\s*(?:30th Celebration|[^-–—]+)?\s*\([^)]*\)\s*#?\d+.*$/i,'').trim();
+      if(name && !/[\u3040-\u30ff\u3400-\u9fff]/.test(name)) return name;
+    }catch(e){}
+  }
+  return '';
+}
+
+async function findCardmarketExact(code, number, preferredLang='en', englishName='') {
   const cleanCode=String(code||'').trim().toUpperCase();
   const rawNum=String(number||'').split('/')[0].trim();
   const cleanNum=rawNum.replace(/^0+/,'') || rawNum;
   const numCandidates=[...new Set([rawNum,cleanNum,cleanNum.padStart(3,'0')].filter(Boolean))];
   if(!cleanCode || !rawNum) return null;
-  const queries=[...new Set(numCandidates.flatMap(n=>[cleanCode+n,cleanCode+' '+n]))];
+  // Cardmarket indexa muchas japonesas con el número de tres cifras y separado del código.
+  // Probamos primero ese formato para no caer en una búsqueda vacía.
+  const padded=cleanNum.replace(/^0+/,'').padStart(3,'0');
+  const enName=String(englishName||'').trim();
+  // Para japonesas Cardmarket no siempre indexa la búsqueda por código+número.
+  // Su catálogo utiliza el nombre internacional de la carta (p. ej.
+  // Ethan's Ho-Oh ex) junto al número. Por eso probamos primero nombre inglés +
+  // número/código y dejamos las consultas antiguas como respaldo.
+  const nameQueries=enName ? [
+    enName+' '+padded,
+    enName+' '+cleanNum,
+    enName+' '+cleanCode+' '+padded,
+    enName+' '+cleanCode+' '+cleanNum
+  ] : [];
+  const queries=[...new Set([...nameQueries, cleanCode+' '+padded, cleanCode+' '+rawNum, cleanCode+padded, cleanCode+rawNum, ...numCandidates.map(n=>cleanCode+' '+n)])];
   for(const q of queries){
     const url='https://www.cardmarket.com/en/Pokemon/Products/Search?searchString='+encodeURIComponent(q)+'&searchMode=v2&mode=gallery';
     try{
@@ -24,12 +61,18 @@ async function findCardmarketExact(code, number, preferredLang='en') {
         const compact=tail.replace(/[^A-Za-z0-9]/g,'').toUpperCase();
         const wantedCandidates=numCandidates.map(n=>(cleanCode+n).replace(/[^A-Za-z0-9]/g,'').toUpperCase());
         const matchedMarker=wantedCandidates.find(w=>compact.endsWith(w));
-        if(!matchedMarker) continue;
+        const nameQueryUsed=enName && q.toLowerCase().includes(enName.toLowerCase());
+        // En consultas por nombre, Cardmarket puede devolver la ficha con un
+        // sufijo V1/V2 que no coincide literalmente con el marcador compacto.
+        // El propio resultado de la búsqueda ya viene filtrado por nombre; aun así
+        // exigimos que la URL contenga el código/número cuando esté disponible.
+        if(!matchedMarker && !nameQueryUsed) continue;
+        if(!matchedMarker && nameQueryUsed && !new RegExp(cleanCode+'[^a-z0-9]*'+padded, 'i').test(tail)) continue;
         const parts=path.split('/').filter(Boolean);
         const setSlug=parts.length>=2?parts[parts.length-2]:'';
-        const marker=matchedMarker;
-        const markerRe=new RegExp('[-_]?'+marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$','i');
-        let cardSlug=tail.replace(markerRe,'').replace(/[-_]+$/,'');
+        const marker=matchedMarker || ((new RegExp(cleanCode.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[-_]?'+padded+'$','i').test(tail)) ? (cleanCode+padded) : '');
+        const markerRe=marker ? new RegExp('[-_]?'+marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$','i') : null;
+        let cardSlug=markerRe ? tail.replace(markerRe,'').replace(/[-_]+$/,'') : tail.replace(/[-_]+$/,'');
         let name=decodeURIComponent(cardSlug).replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
         if(name) name=name.replace(/\bEx\b/g,'ex');
         const setName=decodeURIComponent(setSlug).replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
@@ -141,7 +184,14 @@ module.exports = async function handler(req, res) {
               let cardmarketExactUrl='';
               const isJapanese=String(lang).toLowerCase()==='ja' || /^SV-P$/.test(code) || /^[A-Z]{1,4}\d+[A-Z]$/.test(code);
               if(isJapanese){
-                const cm=await findCardmarketExact(code,cleanNum,'ja');
+                // TCGdex puede devolver correctamente la carta japonesa pero no su
+                // nombre inglés. Cardmarket sí indexa la ficha por el nombre inglés,
+                // así que recuperamos ese nombre como respaldo antes de consultar CM.
+                if(!englishName || /[\u3040-\u30ff\u3400-\u9fff]/.test(englishName)) {
+                  const limitName=await findLimitlessEnglishName(code,cleanNum);
+                  if(limitName) englishName=limitName;
+                }
+                const cm=await findCardmarketExact(code,cleanNum,'ja',englishName);
                 if(cm?.cardmarketExactUrl) cardmarketExactUrl=cm.cardmarketExactUrl;
               }
               return res.status(200).json({...card,image,imageUrl:imageUrl||image,cardmarketProductId,cardmarketExactUrl,cardmarketNameEnglish:englishName,source:'TCGdex',sourceUrl:url});
@@ -195,7 +245,7 @@ module.exports = async function handler(req, res) {
     // recupera la ficha individual exacta. Esto evita dejar al usuario en una búsqueda
     // genérica cuando TCGdex/Limitless todavía no tienen la carta nueva.
     if(code){
-      const cm=await findCardmarketExact(code,cleanNum,uniqueLangs[0]||'en');
+      const cm=await findCardmarketExact(code,cleanNum,uniqueLangs[0]||'en',String(body.englishName||body.cardmarketNameEnglish||'').trim());
       if(cm?.name){
         return res.status(200).json({name:cm.name,localId:cleanNum,id:code+'-'+cleanNum,image:'',imageUrl:'',set:cm.set,cardmarketExactUrl:cm.cardmarketExactUrl,cardmarketNameEnglish:cm.cardmarketNameEnglish,source:cm.source,sourceUrl:cm.sourceUrl});
       }
