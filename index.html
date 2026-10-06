@@ -985,11 +985,16 @@ async function applyManualCardCode(inputId){
 
   x.set_code=String(parsed.code).trim().toUpperCase();
   x.expansion=canonicalExternalExpansion(x.set_code,x.expansion||'');
+  if(!x.tcggoSetEnglish){
+    const enSet=await resolveTcggoEnglishSet(x.set_code,parsed.number);
+    if(enSet)x.tcggoSetEnglish=enSet;
+  }
   window.lastRecognition=x;
   document.getElementById('name').value=x.name||'';
   document.getElementById('number').value=x.number||parsed.number||'';
   populateExpansionOptions(x.expansion||'');
   setCardmarketLink({...x,kind:currentKind});
+  if(currentKind==='card') updateTCGGOPrice({...x,kind:currentKind,lang:selectedManualLang});
   const bits=[x.name,parsed.code,x.number].filter(Boolean).join(' · ');
   document.getElementById('scanStatus').textContent=bits+' — '+(x.expansion||'Expansión identificada')+' · '+(x.name?'Listo para guardar.':'No se encontró la carta.');
   const top=document.getElementById('manualCardCodeTop');
@@ -1159,6 +1164,18 @@ function containsJapaneseText(value){
   return /[\u3040-\u30ff\u3400-\u9fff]/.test(String(value||''));
 }
 
+async function resolveTcggoEnglishSet(code, num){
+  try{
+    const sid=(typeof CARD_IMAGE_SET_IDS!=='undefined'&&CARD_IMAGE_SET_IDS[code])?CARD_IMAGE_SET_IDS[code]:'';
+    if(!sid)return '';
+    const target=code==='30C'?String(num).padStart(3,'0'):(String(num).replace(/^0+/,'')||String(num));
+    const r=await fetch('https://api.tcgdex.net/v2/en/sets/'+encodeURIComponent(sid)+'/'+encodeURIComponent(target),{cache:'force-cache'});
+    if(!r.ok)return '';
+    const j=await r.json();
+    return String(j?.set?.name||'').trim();
+  }catch(e){return '';}
+}
+
 async function enrichCardFromTCGdex(x){
   try{
     const code=normalizeSetCode(x?.set_code||x?.expansion_code||x?.code||'');
@@ -1204,6 +1221,10 @@ async function enrichCardFromTCGdex(x){
           x.source=String(hit.source||x.source||'').trim();
           x.sourceUrl=String(hit.sourceUrl||x.sourceUrl||'').trim();
           x.language_code=langCode; x.lang=selectedLang;
+          if(!x.tcggoSetEnglish){
+            const enSet=await resolveTcggoEnglishSet(code,num);
+            if(enSet)x.tcggoSetEnglish=enSet;
+          }
           const total=Number(hit?.set?.cardCount?.total||0)||0;
           if(total && !String(x.number||'').includes('/')) x.number=String(rawNum).replace(/^0+/,'')+'/'+total;
           return x;
@@ -1295,6 +1316,7 @@ function fillRecognition(x){
       if(y.expansion) populateExpansionOptions(y.expansion);
       setCardmarketLink({...y,kind:currentKind,lang:langEl?.value||y.lang});
       setSaveEnabled(!!String(y.name||'').trim());
+      if(currentKind==='card') updateTCGGOPrice({...y,kind:currentKind,lang:langEl?.value||y.lang});
       return y;
     }).catch(()=>{
       setSaveEnabled(false);
@@ -3470,6 +3492,7 @@ async function fetchPriceChartingIndicativePrice(id){
   setTimeout(bindBackupButtons,1500);
 })();
 </script>
+
 <script id="pokescan-tcggo-price">
 (function(){
   let requestSeq=0;
