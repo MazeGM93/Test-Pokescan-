@@ -24,9 +24,9 @@ module.exports = async function handler(req, res) {
 
 REGLAS ESTRICTAS DE IDIOMA, CÓDIGO Y EXPANSIÓN:
 1) IMAGEN 1: úsala para detectar ÚNICAMENTE el idioma real de la carta. Si el texto es japonés, language_code DEBE ser JA; si es español, ES; si es inglés, EN, etc. NO uses el nombre de la carta para decidir su identidad.
-2) IMAGEN 2: recorte ampliado de la esquina inferior izquierda. Lee ÚNICAMENTE el código principal de la expansión y el número de coleccionista.
-3) IGNORA cualquier pequeño marcador de idioma impreso junto al código, como ES, EN, JP, JA, FR, DE, IT, PT o KO. Por ejemplo, "PFL ES 100" debe devolver set_code="PFL" y number="100".
-4) No unas el código principal con las letras del idioma. "MEP ES 097" significa MEP + 097, no MEPES.
+2) IMAGEN 2: recorte ampliado de la esquina inferior izquierda. Lee ÚNICAMENTE el código principal de la expansión, el pequeño código de idioma y el número de coleccionista.
+3) IMPORTANTE: cuando el código aparezca pegado con dos letras MINÚSCULAS de idioma, esas minúsculas son el idioma y NO forman parte del código de expansión. Ejemplo: "PFLes 125" significa set_code="PFL", language_code="ES", number="125". También puede aparecer separado como "PFL ES 125".
+4) NO unas el código principal con las letras minúsculas del idioma. Reconoce como idiomas ES, EN, FR, DE, IT, PT, JA/JP y KO. Si aparecen en minúsculas pegadas al código, conserva esa información en language_code.
 5) En cartas japonesas conserva el código japonés principal exactamente (por ejemplo SV5A, SV8A, SV9A, SV1S, M2A, M3) y normalízalo a mayúsculas.
 5.1) REGLA ESPECIAL PARA PROMOS: si en la carta aparece "PROMO 195/SV-P" (o cualquier número seguido de "/SV-P"), es una PROMO JAPONESA: set_code="SV-P", number="195" y language_code="JA". NO la conviertas en SVP.
 5.2) Si aparece "SVP 190", "SVP 195", etc., es una PROMO OCCIDENTAL: set_code="SVP", number="190"/"195". SVP y SV-P son códigos distintos y nunca deben mezclarse.
@@ -42,38 +42,110 @@ SV1S: Scarlet ex; SV1V: Violet ex; SV1A: Triplet Beat; SV2P: Snow Hazard; SV2D: 
 CATÁLOGO OCCIDENTAL: usa la base occidental interna de PokeScan; no la mezcles con la japonesa.
 
 Campos: name, set_code, collector_number, number, expansion, language, language_code, variant, confidence (0 a 1).` : `Identifica este producto Pokémon sellado o producto graduado. Devuelve SOLO JSON válido. Lee literalmente nombre, expansión/código, número si aparece y variante. Si el producto muestra un símbolo de set, identifícalo. No inventes datos. Campos: name, set_code, collector_number, number, expansion, language, language_code, variant, confidence (0 a 1).`;
-    const models = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite'];
-    let lastError = null;
-    for (const model of models) {
-      const parts = [{ text: prompt }, { text: 'IMAGEN 1 = CARTA COMPLETA. Úsala SOLO para detectar el idioma real de la carta. El nombre se obtendrá después mediante código+número.' }, { inline_data: { mime_type: full[1], data: full[2] } }];
-      if (isCard && code) parts.push({ text: 'IMAGEN 2 = RECORTE AMPLIADO DE LA ESQUINA INFERIOR IZQUIERDA. Úsala solo para código de expansión y número.' }, { inline_data: { mime_type: code[1], data: code[2] } });
-      const body = { contents: [{ parts }], generationConfig: { responseMimeType: 'application/json' } };
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-      const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':key}, body:JSON.stringify(body) });
-      const j = await r.json();
-      if (!r.ok) { lastError=j?.error||{message:'Error de Gemini'}; if (j?.error?.code===429 || j?.error?.code===503 || j?.error?.status==='UNAVAILABLE') continue; return res.status(502).json({error:`Gemini API error: ${j?.error?.message||'Error desconocido'}`}); }
-      const text=j?.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('')||'';
-      let parsed=null; try{parsed=JSON.parse(text)}catch{try{parsed=JSON.parse(text.replace(/^```json\s*/i,'').replace(/```$/i,'').trim())}catch{}}
-      if(!parsed){lastError={message:'Gemini no devolvió JSON válido.'};continue;}
-      const number=String(parsed.collector_number||parsed.number||'').trim().replace(/^#/,'').split('/')[0];
-      const rawSetCode=String(parsed.set_code||parsed.expansion_code||parsed.code||'').trim().toUpperCase();
-      const rawPromoText=rawSetCode.replace(/\s+/g,'');
-      let setCode=rawSetCode.replace(/[^A-Z0-9-]/g,'');
-      // No confundir la promo japonesa SV-P con la occidental SVP.
-      if(/^(?:PROMO)?\d+\/SV-P$/.test(rawPromoText) || /^SV-P$/.test(rawPromoText)) setCode='SV-P';
-      const langCode=String(parsed.language_code||'').trim().toUpperCase();
-      const isJapanese=langCode==='JA' || /japon|japan/i.test(String(parsed.language||'')) || setCode==='SV-P';
-      const directAliases={"PVL":"PFL"};
-      if(!isJapanese && directAliases[setCode]) setCode=directAliases[setCode];
-      const expansion=isJapanese ? (setCode==='SV-P' ? 'Scarlet & Violet Black Star Promos' : getJapaneseExpansion(setCode)) : (SET_DB[setCode]||'');
-      // No borramos códigos desconocidos: el motor externo puede descubrir cartas nuevas
-      // mediante código+número. La expansión visible se resolverá después de la búsqueda.
-      parsed.language_code=isJapanese?'JA':langCode;
-      parsed.collector_number=number; parsed.number=number; parsed.set_code=setCode; parsed.expansion=expansion; parsed.kind=currentKind;
-      parsed.cardmarket_language_id=({ES:4,EN:1,FR:2,DE:3,IT:5,JA:7,PT:8,KO:10}[String(parsed.language_code||'').toUpperCase()]||null);
-      parsed.marketUrl=buildCardmarketUrl(currentKind,String(parsed.name||'').trim(),setCode,number,parsed.variant,parsed.expansion);
-      return res.status(200).json(parsed);
+    // Ruta rápida: Flash-Lite está optimizado por Google para baja latencia y extracción de datos.
+    // Solo usamos un fallback adicional si Gemini devuelve un error transitorio real (429/503/5xx).
+    const models = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+
+    // Cada reconocimiento es independiente. Hacemos dos en paralelo para no
+    // multiplicar innecesariamente la espera. Si ambos coinciden, terminamos.
+    // Si no coinciden, hacemos un tercer reconocimiento y usamos ese resultado
+    // como base, tal como requiere el escáner.
+    async function recognizeOnce(seedOffset=0) {
+      let lastError = null;
+      for (let attempt = 0; attempt < models.length; attempt++) {
+        const model = models[(attempt + seedOffset) % models.length];
+        const parts = [{ text: prompt }, { text: 'IMAGEN 1 = CARTA COMPLETA. Úsala SOLO para detectar el idioma real de la carta. El nombre se obtendrá después mediante código+número.' }, { inline_data: { mime_type: full[1], data: full[2] } }];
+        if (isCard && code) parts.push({ text: 'IMAGEN 2 = RECORTE AMPLIADO DE LA ESQUINA INFERIOR IZQUIERDA. Lee con máxima precisión código de expansión + idioma en minúsculas si está pegado + número. No inventes ningún carácter.' }, { inline_data: { mime_type: code[1], data: code[2] } });
+        const body = {
+          contents: [{ parts }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 256,
+            thinkingConfig: { thinkingLevel: 'minimal' }
+          }
+        };
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 9000);
+        let r;
+        try {
+          r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':key}, body:JSON.stringify(body), signal: controller.signal });
+        } catch (e) {
+          clearTimeout(timeout);
+          lastError = { message: e?.name === 'AbortError' ? 'Tiempo de espera agotado.' : (e?.message || 'Error de red con Gemini.') };
+          if (attempt === 0) continue;
+          throw new Error(`Gemini no respondió a tiempo. ${lastError.message}`);
+        }
+        clearTimeout(timeout);
+        const j = await r.json();
+        if (!r.ok) {
+          lastError = j?.error || {message:'Error de Gemini'};
+          const transient = j?.error?.code===429 || j?.error?.code===408 || (j?.error?.code>=500) || j?.error?.status==='UNAVAILABLE';
+          if (transient && attempt === 0) continue;
+          if (transient) throw new Error('Gemini está temporalmente saturado. Inténtalo de nuevo.');
+          throw new Error(`Gemini API error: ${j?.error?.message||'Error desconocido'}`);
+        }
+        const text=j?.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('')||'';
+        let parsed=null;
+        try{parsed=JSON.parse(text)}catch{try{parsed=JSON.parse(text.replace(/^```json\s*/i,'').replace(/```$/i,'').trim())}catch{}}
+        if(parsed) return parsed;
+        lastError={message:'Gemini no devolvió JSON válido.'};
+      }
+      throw new Error(lastError?.message||'Gemini no devolvió una respuesta válida.');
     }
+
+    function normalizeRecognition(parsed) {
+      const rawSet = String(parsed?.set_code||parsed?.expansion_code||parsed?.code||'').trim();
+      const rawSetCompact = rawSet.replace(/\s+/g,'');
+      const langNames = {es:'ES',en:'EN',fr:'FR',de:'DE',it:'IT',pt:'PT',ja:'JA',jp:'JA',ko:'KO'};
+      let embeddedLang = '';
+      let baseSet = rawSet;
+      // Detecta, por ejemplo, PFLes, MEPen, SVPfr. Solo se aceptan
+      // minúsculas para evitar confundirlas con parte real del código.
+      const m = rawSetCompact.match(/^([A-Z0-9-]+)(es|en|fr|de|it|pt|ja|jp|ko)$/);
+      if (m) { baseSet = m[1]; embeddedLang = langNames[m[2]] || ''; }
+      let setCode = baseSet.toUpperCase().replace(/[^A-Z0-9-]/g,'');
+      const rawPromoText=setCode.replace(/\s+/g,'');
+      if(/^(?:PROMO)?\d+\/SV-P$/.test(rawPromoText) || /^SV-P$/.test(rawPromoText)) setCode='SV-P';
+      const langCode=embeddedLang || String(parsed?.language_code||'').trim().toUpperCase();
+      const number=String(parsed?.collector_number||parsed?.number||'').trim().replace(/^#/,'').split('/')[0];
+      return { parsed, setCode, number, langCode, signature:`${setCode}|${number}` };
+    }
+
+    let rec1, rec2, rec3;
+    try {
+      [rec1, rec2] = await Promise.all([recognizeOnce(0), recognizeOnce(1)]);
+      const n1 = normalizeRecognition(rec1);
+      const n2 = normalizeRecognition(rec2);
+      const valid1 = !!(n1.setCode && n1.number);
+      const valid2 = !!(n2.setCode && n2.number);
+      if (valid1 && valid2 && n1.signature === n2.signature) {
+        rec3 = null;
+      } else {
+        rec3 = await recognizeOnce(0);
+      }
+    } catch (e) {
+      return res.status(502).json({error:e?.message||'No se pudo reconocer la carta.'});
+    }
+
+    const selected = rec3 || rec1;
+    const n = normalizeRecognition(selected);
+    if (!n.setCode || !n.number) return res.status(502).json({error:'No se pudo leer con seguridad el código y número de la carta.'});
+
+    let parsed = n.parsed;
+    let setCode = n.setCode;
+    const number = n.number;
+    const langCode = n.langCode;
+    const isJapanese=langCode==='JA' || /japon|japan/i.test(String(parsed?.language||'')) || setCode==='SV-P';
+    const directAliases={"PVL":"PFL"};
+    if(!isJapanese && directAliases[setCode]) setCode=directAliases[setCode];
+    const expansion=isJapanese ? (setCode==='SV-P' ? 'Scarlet & Violet Black Star Promos' : getJapaneseExpansion(setCode)) : (SET_DB[setCode]||'');
+    parsed.language_code=isJapanese?'JA':langCode;
+    parsed.collector_number=number; parsed.number=number; parsed.set_code=setCode; parsed.expansion=expansion; parsed.kind=currentKind;
+    parsed.cardmarket_language_id=({ES:4,EN:1,FR:2,DE:3,IT:5,JA:7,PT:8,KO:10}[String(parsed.language_code||'').toUpperCase()]||null);
+    parsed.marketUrl=buildCardmarketUrl(currentKind,String(parsed.name||'').trim(),setCode,number,parsed.variant,parsed.expansion);
+    parsed.scanConsensus = rec3 ? 'third_after_disagreement' : 'first_two_match';
+    return res.status(200).json(parsed);
     return res.status(502).json({error:`Gemini no está disponible ahora mismo. ${lastError?.message||''}`.trim()});
   } catch(e){return res.status(500).json({error:e?.message||'Error interno.'});}
 };
