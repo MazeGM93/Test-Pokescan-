@@ -1022,7 +1022,8 @@ async function updatePokedexiaPrice(x){
   status.className='pokedexia-price-status loading';
   status.textContent='Consultando mínimo Cardmarket en Pokedexia…';
   try{
-    const r=await fetch('/api/pokedexia-price?code='+encodeURIComponent(code)+'&number='+encodeURIComponent(number)+'&lang='+encodeURIComponent(lang),{cache:'no-store'});
+    const name=String(x?.name||x?.cardName||x?.nombre||'').trim();
+    const r=await fetch('/api/pokedexia-price?code='+encodeURIComponent(code)+'&number='+encodeURIComponent(number)+'&lang='+encodeURIComponent(lang)+'&name='+encodeURIComponent(name),{cache:'no-store'});
     const j=await r.json().catch(()=>({}));
     if(requestId!==pokedexiaPriceRequestId)return;
     if(!r.ok||!j?.ok)throw new Error(j?.error||'No se encontró precio');
