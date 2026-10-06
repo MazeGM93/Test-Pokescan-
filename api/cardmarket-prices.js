@@ -50,11 +50,19 @@ export default async function handler(req,res){
     apiUrl.searchParams.set('language',language);
     apiUrl.searchParams.set('condition','nm');
 
-    const r=await fetch(apiUrl.toString(),{
-      method:'GET',
-      headers:{'X-API-Key':apiKey,'accept':'application/json'},
-      cache:'no-store'
-    });
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),15000);
+    let r;
+    try{
+      r=await fetch(apiUrl.toString(),{
+        method:'GET',
+        headers:{'X-API-Key':apiKey,'accept':'application/json'},
+        cache:'no-store',
+        signal:controller.signal
+      });
+    }finally{
+      clearTimeout(timeout);
+    }
     const body=await r.text();
     let data=null;
     try{data=JSON.parse(body);}catch(_){data=null;}
@@ -86,6 +94,9 @@ export default async function handler(req,res){
       source:data?.source||'cardmarket-live'
     });
   }catch(e){
+    if(e?.name==='AbortError'){
+      return res.status(504).json({ok:false,error:'Cardmarket API tardó más de 15 segundos.'});
+    }
     return res.status(502).json({ok:false,error:String(e?.message||e||'Error consultando Cardmarket API')});
   }
 }
