@@ -955,6 +955,12 @@ async function applyManualCardCode(inputId){
           x.sourceUrl=String(serverCard.sourceUrl||'').trim();
           x.cardmarketNameEnglish=String(serverCard.cardmarketNameEnglish||'').trim();
           x.cardmarketExactUrl=String(serverCard.cardmarketExactUrl||'').trim();
+          // Para una búsqueda manual japonesa mostramos el nombre internacional/inglés.
+          // El idioma de la carta sigue siendo Japonés: solo cambiamos el texto del nombre
+          // para que la búsqueda posterior en Cardmarket use el mismo nombre que su catálogo.
+          if(japaneseCode && x.cardmarketNameEnglish && !containsJapaneseText(x.cardmarketNameEnglish)){
+            x.name=x.cardmarketNameEnglish;
+          }
           x.lang=selectedLang;
           x.language_code=selectedLang==='Japonés'?'JA':(Object.entries(langMap).find(([,v])=>v===selectedLang)?.[0]||'');
 
@@ -996,6 +1002,9 @@ async function applyManualCardCode(inputId){
         if(cmId)x.cardmarketProductId=String(cmId);
         if(hit?.cardmarketNameEnglish)x.cardmarketNameEnglish=String(hit.cardmarketNameEnglish).trim();
         if(hit?.cardmarketExactUrl)x.cardmarketExactUrl=String(hit.cardmarketExactUrl).trim();
+        if(japaneseCode && x.cardmarketNameEnglish && !containsJapaneseText(x.cardmarketNameEnglish)){
+          x.name=x.cardmarketNameEnglish;
+        }
         if(hit.image && !x.imageUrl) x.imageUrl=String(hit.image).trim();
         if(!x.imageUrl){
           const p=new URLSearchParams({code:parsed.code,number:target,lang:preferred});
@@ -1004,6 +1013,17 @@ async function applyManualCardCode(inputId){
         }
         const total=Number(hit?.set?.cardCount?.total||0)||0;
         if(total && !String(parsed.number).includes('/'))x.number=String(parsed.number).replace(/^0+/,'')+'/'+total;
+      }
+
+      // Si TCGdex no entregó el nombre inglés pero la carta es japonesa,
+      // usamos Limitless como respaldo. Así SV9A 77 termina mostrando
+      // "Ethan's Ho-Oh ex" y Cardmarket puede buscar por ese nombre.
+      if(japaneseCode && (!x.cardmarketNameEnglish || containsJapaneseText(x.cardmarketNameEnglish))){
+        const jpFallback=await fetchJapaneseScannerName(parsed.code,target);
+        if(jpFallback?.name && !containsJapaneseText(jpFallback.name)){
+          x.cardmarketNameEnglish=String(jpFallback.name).trim();
+          x.name=x.cardmarketNameEnglish;
+        }
       }
     }catch(e){ console.warn('Resolución manual:',e); }
   }
