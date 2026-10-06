@@ -67,24 +67,30 @@ function htmlText(html) {
 function getLanguagePrice(html, language) {
   const label = LANG_LABELS[language];
   if (!label) return null;
-
-  // TCGGO renders the EU Prices table as Language | Region | Price.
-  // Keep the match close to the language label so we don't accidentally
-  // return the general EU Low or another language's price.
   const text = htmlText(html);
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(escaped + '\\s+(?:Europe|EU)\\s+(\\d{1,6}(?:[.,]\\d{1,2})?)\\s*€', 'i');
+  // TCGGO's table is rendered as: Language | Region | Price.
+  // In the parsed text it can appear either with pipes or only whitespace.
+  const re = new RegExp(
+    escaped + '\\s*(?:\\|\\s*)?' + escaped + '\\s*(?:\\|\\s*)?Europe\\s*(?:\\|\\s*)?(\\d{1,6}(?:[.,]\\d{1,2})?)\\s*€',
+    'i'
+  );
   const m = text.match(re);
   if (m) {
     const n = Number(m[1].replace(/\./g, '').replace(',', '.'));
-    return Number.isFinite(n) ? n : null;
+    if (Number.isFinite(n)) return n;
   }
 
-  // Fallback for the table representation where whitespace/markup differs.
-  const row = new RegExp(escaped + '[\\s\\S]{0,250}?(\\d{1,6}(?:[.,]\\d{1,2})?)\\s*€', 'i').exec(text);
-  if (row) {
-    const n = Number(row[1].replace(/\./g, '').replace(',', '.'));
-    return Number.isFinite(n) ? n : null;
+  // More permissive fallback: only inspect a short window after the language
+  // row and take the first euro amount in that row.
+  const pos = text.search(new RegExp('\\b' + escaped + '\\b', 'i'));
+  if (pos >= 0) {
+    const window = text.slice(pos, pos + 180);
+    const amounts = [...window.matchAll(/(\d{1,6}(?:[.,]\d{1,2})?)\s*€/g)];
+    if (amounts.length) {
+      const n = Number(amounts[0][1].replace(/\./g, '').replace(',', '.'));
+      if (Number.isFinite(n)) return n;
+    }
   }
   return null;
 }
