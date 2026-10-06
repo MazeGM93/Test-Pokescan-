@@ -39,8 +39,6 @@ nav{position:fixed;bottom:11px;left:50%;transform:translateX(-50%);width:min(650
 .sealed-menu-card{width:100%;max-width:520px;margin:18px auto 0;background:#fff;border:1px solid var(--line);border-radius:22px;padding:10px;box-shadow:0 8px 24px rgba(20,35,60,.08);cursor:pointer;text-align:left}.sealed-menu-art{height:210px;border-radius:17px;overflow:hidden;position:relative;background:linear-gradient(135deg,#101b34,#d9a928)}.sealed-menu-art img{width:100%;height:100%;object-fit:contain;display:block;background:linear-gradient(135deg,#101b34,#d9a928)}.sealed-menu-overlay{position:absolute;inset:0;background:linear-gradient(90deg,rgba(8,17,35,.82) 0%,rgba(8,17,35,.35) 48%,rgba(8,17,35,.05) 75%);display:flex;flex-direction:column;justify-content:center;padding:22px}.sealed-menu-kicker{font-size:13px;font-weight:900;color:#f5d66a;letter-spacing:.8px;text-transform:uppercase}.sealed-menu-title{font-size:34px;line-height:1;margin:5px 0;color:#fff;font-weight:950}.sealed-menu-sub{font-size:13px;color:#fff;opacity:.9;max-width:190px;line-height:1.3}.sealed-menu-button{margin-top:14px;display:inline-flex;width:max-content;background:#fff;color:#101b34;border-radius:12px;padding:10px 15px;font-weight:950;font-size:13px}.sealed-menu-note{text-align:center;color:var(--muted);font-size:12px;margin-top:10px}@media(max-width:500px){.sealed-menu-card{margin-top:12px}.sealed-menu-art{height:175px}.sealed-menu-title{font-size:29px}.sealed-menu-overlay{padding:17px}} 
 .edit-market-slot{display:flex;align-items:flex-end;justify-content:flex-start;padding-bottom:4px}.edit-market-link{display:inline-flex!important;align-items:center;justify-content:center;text-decoration:none;white-space:nowrap;padding:11px 14px;border-radius:12px;background:#eaf2ff;color:#1765c0;font-weight:900;border:1px solid #d6e5fb}.edit-market-link[style*="opacity: .45"],.edit-market-link[style*="opacity:.45"]{filter:grayscale(.2)}
 @media(max-width:600px){input,select,textarea{font-size:16px!important}}
-.pokedexia-price-status{display:block;margin-top:4px;font-size:10px;line-height:1.25;color:#7b8498;font-weight:700}.pokedexia-price-status.ok{color:#23752a}.pokedexia-price-status.err{color:#a33b3b}.pokedexia-price-status.loading{color:#287bea}
-
 
 /* Selector de logos de expansión: independiente del escáner y de las APIs */
 #expLogoModal{position:fixed;inset:0;z-index:9999;display:none;background:rgba(12,18,32,.55);backdrop-filter:blur(4px);align-items:flex-end;justify-content:center}
@@ -380,7 +378,7 @@ header{height:76px;margin-bottom:10px}.brand{display:grid;grid-template-columns:
 
 <div id="bulkModal" class="modal"><div class="sheet bulk-sheet"><div class="head"><h2>🗂️ Organizar Bulk</h2><button class="close" onclick="closeBulk()">×</button></div><p class="muted" style="margin:3px 0 8px">Coloca una carta y pulsa OK para escanearla. Cuando termine, coloca la siguiente y vuelve a pulsar OK.</p><div class="bulk-top"><span class="bulk-count" id="bulkCount">0 cartas</span><span class="bulk-state" id="bulkState">Preparando cámara…</span></div><div id="bulkCamera" class="bulk-camera"><div>📷<br>Coloca la carta</div></div><input id="bulkLookupCode" class="bulk-hidden-input" aria-hidden="true" tabindex="-1"><div class="bulk-actions"><button id="bulkStartBtn" class="btn bulk-ok-btn" type="button" onclick="bulkConfirmNext()">✅ OK · Escanear carta</button><button class="btn light" type="button" onclick="finishBulk()">📋 Ver reparto</button></div><div id="bulkSummary" class="bulk-summary" style="display:none"></div><div id="bulkList" class="bulk-list"></div><button id="bulkResumeBtn" class="btn bulk-resume-btn" type="button" onclick="resumeBulkScanning()">📷 Volver a escanear</button></div></div>
 <div id="modal" class="modal"><div class="sheet"><div class="head"><h2 id="scanTitle">Escanear carta</h2><button class="close" onclick="closeScan()">×</button></div><div id="cameraBox" class="camera"><div>📷<br>Apunta a la pieza</div></div><div class="manual-entry-box"><div class="manual-entry-title">⌨️ Introducir carta manualmente</div><div class="manual-entry-row"><input id="manualCardCodeTop" type="text" placeholder="Ej. PFL 02 o DRI 218" autocomplete="off"><button type="button" class="market-manual-save" onclick="applyManualCardCode('manualCardCodeTop')">Buscar</button></div><small>Si no quieres usar el escáner, introduce el código y número de la carta.</small></div><div class="actions scan-actions"><button id="scanNow" class="btn" onclick="recognizeCurrentFrame()">🔎 Reconocer carta</button><button type="button" class="save" onclick="saveItem()" id="saveBtnTop" disabled>💾 Guardar</button></div>
-<div id="result" class="result"><div class="result-head"><b>Ficha para guardar</b><span class="result-hint">Puedes corregir el código arriba</span></div><div class="result-manual"><div class="result-manual-row"><input id="manualCardCode" type="text" placeholder="Código manual · Ej. PFL 02" autocomplete="off"><button type="button" class="market-manual-save" onclick="applyManualCardCode('manualCardCode')">Usar código</button></div><small>Si Gemini falla o se equivoca, escribe código + número y se recalcula la expansión y Cardmarket.</small></div><div class="fields" style="margin-top:9px"><label>Nombre<input id="name" placeholder="Ej. Charizard ex"></label><label>Idioma<select id="lang" onchange="setCardmarketLink({...window.lastRecognition,kind:currentKind,lang:this.value})"><option>Español</option><option>Inglés</option><option>Japonés</option><option>Francés</option><option>Alemán</option></select></label><label>Expansión<select id="set" onchange="handleExpansionChoice()"><option value="">— Selecciona una expansión —</option></select><input id="setManual" style="display:none;margin-top:5px" placeholder="Escribe la expansión manualmente"></label><label>Nº carta<input id="number" placeholder="Ej. 123/310"></label><label>Variante<select id="scanVariant"><option value="">— Selecciona variante —</option><option>Holo</option><option>Reverse</option><option>Cosmos</option><option>Común</option><option>Sin Holo</option><option>Promo / Stamped</option><option>Otra</option></select></label><label>Precio compra (€)<input id="buy" type="number" step=".01" value="0"></label><div class="price-market-cell"><label>Precio actual (€)</label><input id="market" type="number" step=".01" value="0"><small id="pokedexiaPriceStatus" class="pokedexia-price-status">Precio Cardmarket mínimo: esperando carta…</small></div><div class="qty-cardmarket-row"><label>Cantidad<input id="qty" type="number" min="1" value="1"></label><div id="marketLinkBox" class="market-link-inline" style="display:none"><a id="marketLink" class="market-link-button" href="#" target="_blank" rel="noopener noreferrer">🛒 Cardmarket</a></div></div></div><div class="scan-result-actions"><button class="btn save" onclick="saveItem()" id="saveBtn">💾 Guardar</button><button type="button" class="scan-result-cancel" onclick="cancelScanResult()">Cancelar</button></div></div><p id="scanStatus" class="muted">La cámara se abrirá automáticamente. Coloca la carta dentro del marco y espera a que termine el reconocimiento.</p></div></div>
+<div id="result" class="result"><div class="result-head"><b>Ficha para guardar</b><span class="result-hint">Puedes corregir el código arriba</span></div><div class="result-manual"><div class="result-manual-row"><input id="manualCardCode" type="text" placeholder="Código manual · Ej. PFL 02" autocomplete="off"><button type="button" class="market-manual-save" onclick="applyManualCardCode('manualCardCode')">Usar código</button></div><small>Si Gemini falla o se equivoca, escribe código + número y se recalcula la expansión y Cardmarket.</small></div><div class="fields" style="margin-top:9px"><label>Nombre<input id="name" placeholder="Ej. Charizard ex"></label><label>Idioma<select id="lang" onchange="setCardmarketLink({...window.lastRecognition,kind:currentKind,lang:this.value})"><option>Español</option><option>Inglés</option><option>Japonés</option><option>Francés</option><option>Alemán</option></select></label><label>Expansión<select id="set" onchange="handleExpansionChoice()"><option value="">— Selecciona una expansión —</option></select><input id="setManual" style="display:none;margin-top:5px" placeholder="Escribe la expansión manualmente"></label><label>Nº carta<input id="number" placeholder="Ej. 123/310"></label><label>Variante<select id="scanVariant"><option value="">— Selecciona variante —</option><option>Holo</option><option>Reverse</option><option>Cosmos</option><option>Común</option><option>Sin Holo</option><option>Promo / Stamped</option><option>Otra</option></select></label><label>Precio compra (€)<input id="buy" type="number" step=".01" value="0"></label><div class="price-market-cell"><label>Precio actual (€)</label><input id="market" type="number" step=".01" value="0"></div><div class="qty-cardmarket-row"><label>Cantidad<input id="qty" type="number" min="1" value="1"></label><div id="marketLinkBox" class="market-link-inline" style="display:none"><a id="marketLink" class="market-link-button" href="#" target="_blank" rel="noopener noreferrer">🛒 Cardmarket</a></div></div></div><div class="scan-result-actions"><button class="btn save" onclick="saveItem()" id="saveBtn">💾 Guardar</button><button type="button" class="scan-result-cancel" onclick="cancelScanResult()">Cancelar</button></div></div><p id="scanStatus" class="muted">La cámara se abrirá automáticamente. Coloca la carta dentro del marco y espera a que termine el reconocimiento.</p></div></div>
 
 
 <style id="pokescan-manual-items-ui">.manual-sealed-image-wrap,.manual-graded-image-wrap{text-align:center;margin:4px 0 12px}.manual-sealed-image-wrap .sealed-detail-img,.manual-graded-image-wrap .sealed-detail-img{width:150px;height:180px;margin:0 auto 8px}.manual-sealed-image-wrap .market-manual-save,.manual-graded-image-wrap .market-manual-save{border:0;border-radius:10px;padding:9px 12px;font-weight:900;background:#edf0f5;color:#182230;cursor:pointer}.graded-fields .full{grid-column:1/-1}@media(max-width:500px){.manual-sealed-image-wrap .sealed-detail-img,.manual-graded-image-wrap .sealed-detail-img{width:125px;height:155px}}</style>
@@ -1003,51 +1001,17 @@ async function applyManualCardCode(inputId){
   if(result)setTimeout(()=>result.scrollIntoView({behavior:'smooth',block:'start'}),30);
 }
 
-let pokedexiaPriceRequestId=0;
-async function updatePokedexiaPrice(x){
-  const status=document.getElementById('pokedexiaPriceStatus');
-  const market=document.getElementById('market');
-  if(!status||!market)return;
-  const code=String(x?.set_code||x?.setCode||x?.expansion_code||x?.code||'').trim().toUpperCase();
-  const number=String(x?.number||x?.collector_number||'').trim().split('/')[0];
-  const lang=String(x?.lang||x?.language||document.getElementById('lang')?.value||'Español').trim();
-  const name=String(x?.name||document.getElementById('name')?.value||'').trim();
-  if(!code||!number){status.className='pokedexia-price-status';status.textContent='Precio Cardmarket mínimo: falta código/número.';return;}
-  const supported=['Español','Inglés','Francés','Alemán','Italiano'];
-  if(!supported.includes(lang)){
-    status.className='pokedexia-price-status err';
-    status.textContent='Pokedexia no ofrece precio para '+lang+'.';
-    return;
-  }
-  const requestId=++pokedexiaPriceRequestId;
-  status.className='pokedexia-price-status loading';
-  status.textContent='Consultando mínimo Cardmarket en Pokedexia…';
-  try{
-    const r=await fetch('/api/pokedexia-price?code='+encodeURIComponent(code)+'&number='+encodeURIComponent(number)+'&lang='+encodeURIComponent(lang)+'&name='+encodeURIComponent(name),{cache:'no-store'});
-    const j=await r.json().catch(()=>({}));
-    if(requestId!==pokedexiaPriceRequestId)return;
-    if(!r.ok||!j?.ok)throw new Error(j?.error||'No se encontró precio');
-    market.value=Number(j.price).toFixed(2);
-    status.className='pokedexia-price-status ok';
-    status.textContent='Mínimo Cardmarket: '+eur(Number(j.price))+' · Pokedexia · '+lang;
-  }catch(e){
-    if(requestId!==pokedexiaPriceRequestId)return;
-    status.className='pokedexia-price-status err';
-    status.textContent='No se pudo consultar Pokedexia: '+String(e?.message||e);
-  }
-}
-
 function setCardmarketLink(x){
   const box=document.getElementById('marketLinkBox');
   const link=document.getElementById('marketLink');
   if(!box||!link)return;
   const exact=(x.kind==='card'||x.kind==='graded')?getCardmarketUrl(x):'';
   const url=exact||((x.kind==='card'||x.kind==='graded')?buildCardmarketSearchUrl(x):(x.marketUrl||buildCardmarketSearchUrl(x)));
-  if(!url){box.style.display='none';updatePokedexiaPrice(x);return;}
+  if(!url){box.style.display='none'; if(typeof updateTCGGOPrice==='function') updateTCGGOPrice(x); return;}
   link.href=url;
   link.textContent='🛒 Cardmarket';
   box.style.display='block';
-  updatePokedexiaPrice(x);
+  if(typeof updateTCGGOPrice==='function') updateTCGGOPrice(x);
 }
 
 function populateExpansionOptions(selected){
@@ -3343,6 +3307,45 @@ function handleCustomExpansionLogo(input){const file=input&&input.files&&input.f
 loadSharedExpansionLogos();</script>
 
 <div id="expLogoModal" aria-hidden="true" onclick="if(event.target===this)closeExpansionLogoSelector()"><div class="logo-sheet"><div class="logo-top"><b id="expLogoModalTitle">Elegir logo</b><button type="button" class="logo-close" onclick="closeExpansionLogoSelector()">×</button></div><div class="logo-custom"><label for="expLogoFile">＋ Añadir mi propio logo</label><input id="expLogoFile" type="file" accept="image/*" onchange="handleCustomExpansionLogo(this)"></div><div id="expLogoGrid" class="logo-grid"></div></div></div>
+
+
+<script id="pokescan-tcggo">
+let tcggoPriceRequestId=0;
+async function updateTCGGOPrice(x){
+  const input=document.getElementById('market');
+  if(!input || !x || (x.kind && !['card','graded'].includes(x.kind))) return;
+  const requestId=++tcggoPriceRequestId;
+  const code=String(x?.setCode||x?.set_code||x?.code||'').trim().toUpperCase();
+  const number=String(x?.number||x?.collector_number||'').split('/')[0].trim();
+  const langName=String(document.getElementById('lang')?.value||x?.lang||'Español').trim();
+  const langMap={'Español':'es','Inglés':'en','Japonés':'ja','Francés':'fr','Alemán':'de','Italiano':'it','Portugués':'pt','Coreano':'ko','Chino':'zh'};
+  const lang=langMap[langName]||'es';
+  if(!code||!number)return;
+  input.value='';
+  input.placeholder='Consultando TCGGO…';
+  try{
+    const params=new URLSearchParams({
+      code, number, lang,
+      nameEnglish:String(x?.cardmarketNameEnglish||x?.nameEnglish||'').trim(),
+      name:String(x?.name||'').trim()
+    });
+    const r=await fetch('/api/tcggo-price?'+params.toString(),{cache:'no-store'});
+    let j={};try{j=await r.json()}catch(e){}
+    if(requestId!==tcggoPriceRequestId)return;
+    if(!r.ok||!j?.ok)throw new Error(j?.error||'No se encontró el precio en TCGGO');
+    input.value=Number(j.price).toFixed(2);
+    input.placeholder='Precio actual (€)';
+    input.title='Precio TCGGO · Cardmarket · '+langName;
+    return j;
+  }catch(e){
+    if(requestId!==tcggoPriceRequestId)return;
+    input.value='';
+    input.placeholder='No disponible';
+    input.title=e?.message||'No se pudo consultar TCGGO';
+    console.warn('TCGGO:',e);
+  }
+}
+</script>
 
 <script id="pokescan-pricecharting">
 async function priceChartingLookupForGraded(x){
