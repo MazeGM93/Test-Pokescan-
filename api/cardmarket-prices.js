@@ -47,7 +47,6 @@ export default async function handler(req,res){
     // La API aplica el idioma y la condición en origen y devuelve prices.from como
     // el anuncio más barato que coincide con ambos filtros.
     const apiUrl=new URL(`https://cardmarketapi.com/api/v1/card/${encodeURIComponent(productId)}`);
-    apiUrl.searchParams.set('game','pokemon');
     apiUrl.searchParams.set('language',language);
     apiUrl.searchParams.set('condition','nm');
 
@@ -78,6 +77,9 @@ export default async function handler(req,res){
       languageApi:language,
       condition:'NM',
       price,
+      // El frontend trabaja con un mapa por estado. Esta primera versión consulta
+      // únicamente NM, así que devolvemos el precio bajo la clave NM.
+      prices: price==null ? {} : {NM: price},
       priceField:'prices.from',
       fetchedAt:data?.fetched_at||null,
       available:Number.isFinite(Number(data?.prices?.available))?Number(data.prices.available):null,
