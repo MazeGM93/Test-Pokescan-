@@ -1011,6 +1011,7 @@ async function updatePokedexiaPrice(x){
   const code=String(x?.set_code||x?.setCode||x?.expansion_code||x?.code||'').trim().toUpperCase();
   const number=String(x?.number||x?.collector_number||'').trim().split('/')[0];
   const lang=String(x?.lang||x?.language||document.getElementById('lang')?.value||'Español').trim();
+  const name=String(x?.name||document.getElementById('name')?.value||'').trim();
   if(!code||!number){status.className='pokedexia-price-status';status.textContent='Precio Cardmarket mínimo: falta código/número.';return;}
   const supported=['Español','Inglés','Francés','Alemán','Italiano'];
   if(!supported.includes(lang)){
@@ -1022,7 +1023,6 @@ async function updatePokedexiaPrice(x){
   status.className='pokedexia-price-status loading';
   status.textContent='Consultando mínimo Cardmarket en Pokedexia…';
   try{
-    const name=String(x?.name||x?.cardName||x?.nombre||'').trim();
     const r=await fetch('/api/pokedexia-price?code='+encodeURIComponent(code)+'&number='+encodeURIComponent(number)+'&lang='+encodeURIComponent(lang)+'&name='+encodeURIComponent(name),{cache:'no-store'});
     const j=await r.json().catch(()=>({}));
     if(requestId!==pokedexiaPriceRequestId)return;
