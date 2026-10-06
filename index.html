@@ -378,7 +378,7 @@ header{height:76px;margin-bottom:10px}.brand{display:grid;grid-template-columns:
 
 <div id="bulkModal" class="modal"><div class="sheet bulk-sheet"><div class="head"><h2>🗂️ Organizar Bulk</h2><button class="close" onclick="closeBulk()">×</button></div><p class="muted" style="margin:3px 0 8px">Coloca una carta y pulsa OK para escanearla. Cuando termine, coloca la siguiente y vuelve a pulsar OK.</p><div class="bulk-top"><span class="bulk-count" id="bulkCount">0 cartas</span><span class="bulk-state" id="bulkState">Preparando cámara…</span></div><div id="bulkCamera" class="bulk-camera"><div>📷<br>Coloca la carta</div></div><input id="bulkLookupCode" class="bulk-hidden-input" aria-hidden="true" tabindex="-1"><div class="bulk-actions"><button id="bulkStartBtn" class="btn bulk-ok-btn" type="button" onclick="bulkConfirmNext()">✅ OK · Escanear carta</button><button class="btn light" type="button" onclick="finishBulk()">📋 Ver reparto</button></div><div id="bulkSummary" class="bulk-summary" style="display:none"></div><div id="bulkList" class="bulk-list"></div><button id="bulkResumeBtn" class="btn bulk-resume-btn" type="button" onclick="resumeBulkScanning()">📷 Volver a escanear</button></div></div>
 <div id="modal" class="modal"><div class="sheet"><div class="head"><h2 id="scanTitle">Escanear carta</h2><button class="close" onclick="closeScan()">×</button></div><div id="cameraBox" class="camera"><div>📷<br>Apunta a la pieza</div></div><div class="manual-entry-box"><div class="manual-entry-title">⌨️ Introducir carta manualmente</div><div class="manual-entry-row"><input id="manualCardCodeTop" type="text" placeholder="Ej. PFL 02 o DRI 218" autocomplete="off"><button type="button" class="market-manual-save" onclick="applyManualCardCode('manualCardCodeTop')">Buscar</button></div><small>Si no quieres usar el escáner, introduce el código y número de la carta.</small></div><div class="actions scan-actions"><button id="scanNow" class="btn" onclick="recognizeCurrentFrame()">🔎 Reconocer carta</button><button type="button" class="save" onclick="saveItem()" id="saveBtnTop" disabled>💾 Guardar</button></div>
-<div id="result" class="result"><div class="result-head"><b>Ficha para guardar</b><span class="result-hint">Puedes corregir el código arriba</span></div><div class="result-manual"><div class="result-manual-row"><input id="manualCardCode" type="text" placeholder="Código manual · Ej. PFL 02" autocomplete="off"><button type="button" class="market-manual-save" onclick="applyManualCardCode('manualCardCode')">Usar código</button></div><small>Si Gemini falla o se equivoca, escribe código + número y se recalcula la expansión y Cardmarket.</small></div><div class="fields" style="margin-top:9px"><label>Nombre<input id="name" placeholder="Ej. Charizard ex"></label><label>Idioma<select id="lang" onchange="setCardmarketLink({...window.lastRecognition,kind:currentKind,lang:this.value})"><option>Español</option><option>Inglés</option><option>Japonés</option><option>Francés</option><option>Alemán</option></select></label><label>Expansión<select id="set" onchange="handleExpansionChoice()"><option value="">— Selecciona una expansión —</option></select><input id="setManual" style="display:none;margin-top:5px" placeholder="Escribe la expansión manualmente"></label><label>Nº carta<input id="number" placeholder="Ej. 123/310"></label><label>Variante<select id="scanVariant"><option value="">— Selecciona variante —</option><option>Holo</option><option>Reverse</option><option>Cosmos</option><option>Común</option><option>Sin Holo</option><option>Promo / Stamped</option><option>Otra</option></select></label><label>Precio compra (€)<input id="buy" type="number" step=".01" value="0"></label><div class="price-market-cell"><label>Precio actual (€)</label><input id="market" type="number" step=".01" value="0"></div><div id="tcggoDebug" style="grid-column:1/-1;display:none;margin-top:6px;padding:10px;border:1px solid #cfd8ea;border-radius:12px;background:#f8faff;font-size:12px;line-height:1.35"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>🔎 Analizador TCGGO</b><button type="button" onclick="document.getElementById('tcggoDebug').style.display='none'" style="border:0;background:none;font-size:18px">×</button></div><div id="tcggoDebugBody" style="margin-top:7px"></div></div><div class="qty-cardmarket-row"><label>Cantidad<input id="qty" type="number" min="1" value="1"></label><div id="marketLinkBox" class="market-link-inline" style="display:none"><a id="marketLink" class="market-link-button" href="#" target="_blank" rel="noopener noreferrer">🛒 Cardmarket</a></div></div></div><div class="scan-result-actions"><button class="btn save" onclick="saveItem()" id="saveBtn">💾 Guardar</button><button type="button" class="scan-result-cancel" onclick="cancelScanResult()">Cancelar</button></div></div><p id="scanStatus" class="muted">La cámara se abrirá automáticamente. Coloca la carta dentro del marco y espera a que termine el reconocimiento.</p></div></div>
+<div id="result" class="result"><div class="result-head"><b>Ficha para guardar</b><span class="result-hint">Puedes corregir el código arriba</span></div><div class="result-manual"><div class="result-manual-row"><input id="manualCardCode" type="text" placeholder="Código manual · Ej. PFL 02" autocomplete="off"><button type="button" class="market-manual-save" onclick="applyManualCardCode('manualCardCode')">Usar código</button></div><small>Si Gemini falla o se equivoca, escribe código + número y se recalcula la expansión y Cardmarket.</small></div><div class="fields" style="margin-top:9px"><label>Nombre<input id="name" placeholder="Ej. Charizard ex"></label><label>Idioma<select id="lang" onchange="setCardmarketLink({...window.lastRecognition,kind:currentKind,lang:this.value}); updateTCGGOPrice({...window.lastRecognition,kind:currentKind,lang:this.value})"><option>Español</option><option>Inglés</option><option>Japonés</option><option>Francés</option><option>Alemán</option></select></label><label>Expansión<select id="set" onchange="handleExpansionChoice()"><option value="">— Selecciona una expansión —</option></select><input id="setManual" style="display:none;margin-top:5px" placeholder="Escribe la expansión manualmente"></label><label>Nº carta<input id="number" placeholder="Ej. 123/310"></label><label>Variante<select id="scanVariant"><option value="">— Selecciona variante —</option><option>Holo</option><option>Reverse</option><option>Cosmos</option><option>Común</option><option>Sin Holo</option><option>Promo / Stamped</option><option>Otra</option></select></label><label>Precio compra (€)<input id="buy" type="number" step=".01" value="0"></label><div class="price-market-cell"><label>Precio actual (€)</label><input id="market" type="number" step=".01" value="0"></div><div class="qty-cardmarket-row"><label>Cantidad<input id="qty" type="number" min="1" value="1"></label><div id="marketLinkBox" class="market-link-inline" style="display:none"><a id="marketLink" class="market-link-button" href="#" target="_blank" rel="noopener noreferrer">🛒 Cardmarket</a></div></div></div><div id="tcggoAnalyzer" class="tcggo-analyzer" style="display:none"></div><div class="scan-result-actions"><button class="btn save" onclick="saveItem()" id="saveBtn">💾 Guardar</button><button type="button" class="scan-result-cancel" onclick="cancelScanResult()">Cancelar</button></div></div><p id="scanStatus" class="muted">La cámara se abrirá automáticamente. Coloca la carta dentro del marco y espera a que termine el reconocimiento.</p></div></div>
 
 
 <style id="pokescan-manual-items-ui">.manual-sealed-image-wrap,.manual-graded-image-wrap{text-align:center;margin:4px 0 12px}.manual-sealed-image-wrap .sealed-detail-img,.manual-graded-image-wrap .sealed-detail-img{width:150px;height:180px;margin:0 auto 8px}.manual-sealed-image-wrap .market-manual-save,.manual-graded-image-wrap .market-manual-save{border:0;border-radius:10px;padding:9px 12px;font-weight:900;background:#edf0f5;color:#182230;cursor:pointer}.graded-fields .full{grid-column:1/-1}@media(max-width:500px){.manual-sealed-image-wrap .sealed-detail-img,.manual-graded-image-wrap .sealed-detail-img{width:125px;height:155px}}</style>
@@ -394,6 +394,9 @@ header{height:76px;margin-bottom:10px}.brand{display:grid;grid-template-columns:
 .bulk-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}.bulk-actions button{min-height:44px}.bulk-ok-btn{min-height:64px!important;font-size:17px;font-weight:950}.bulk-code-big{display:inline-flex;align-items:center;margin-left:8px;padding:3px 8px;border-radius:8px;background:#edf4ff;color:#1f64c9;font-size:15px;font-weight:950;white-space:nowrap;vertical-align:middle}
 .bulk-list{margin-top:10px;display:grid;gap:7px;max-height:42vh;overflow:auto}.bulk-resume-btn{display:none;width:100%;margin-top:14px;min-height:58px;font-size:17px}.bulk-sheet.bulk-finished .bulk-camera,.bulk-sheet.bulk-finished .bulk-actions{display:none!important}.bulk-sheet.bulk-finished .bulk-list{max-height:68vh}.bulk-sheet.bulk-finished .bulk-resume-btn{display:block}.bulk-item{display:grid;grid-template-columns:42px 1fr auto;gap:8px;align-items:center;background:#fff;border:1px solid #dfe5ef;border-radius:11px;padding:7px 8px;cursor:pointer;transition:.15s ease}.bulk-item:hover{border-color:#b9c8df}.bulk-item.bulk-done{background:#effbf2;border-color:#69c47a}.bulk-num{width:34px;height:34px;border-radius:9px;background:#edf4ff;color:#287bea;display:flex;align-items:center;justify-content:center;font-weight:900}.bulk-item.bulk-done .bulk-num{background:#28a745;color:#fff}.bulk-main{min-width:0}.bulk-main b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bulk-main small{display:block;margin-top:2px;color:#78849b;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bulk-deck{font-weight:950;font-size:12px;white-space:nowrap}.bulk-summary{margin-top:9px;padding:9px;background:#f7f8fb;border:1px solid #dfe5ef;border-radius:11px;font-size:11px}.bulk-summary b{font-size:13px}.bulk-hidden-input{position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none}
 @media(max-width:500px){.bulk-camera{height:auto;min-height:210px;max-height:none;aspect-ratio:4/3}.bulk-frame{height:90%;aspect-ratio:63/88}.bulk-sheet{padding:10px}.bulk-item{grid-template-columns:36px 1fr auto}.bulk-num{width:30px;height:30px}.bulk-deck{font-size:11px}.bulk-code-big{font-size:14px;padding:3px 6px;margin-left:5px}}
+</style>
+<style id="pokescan-tcggo-analyzer">
+.tcggo-analyzer{margin-top:8px;border:1px solid #d9e1ef;border-radius:14px;background:#f8faff;overflow:hidden}.tcggo-analyzer-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 11px;font-weight:950;color:#18243b}.tcggo-analyzer-close{border:0;background:transparent;color:#287bea;font-size:23px;line-height:1;cursor:pointer}.tcggo-result{margin:0 10px 10px;padding:9px 10px;border-radius:11px;font-size:12px;font-weight:800}.tcggo-result.ok{background:#e9f8ed;color:#176a2d}.tcggo-result.error{background:#fff0f0;color:#9e2424}.tcggo-step{border-top:1px solid #e0e6f0;padding:8px 10px}.tcggo-step-title{font-size:11px;font-weight:900;line-height:1.35}.tcggo-step-detail{margin-top:4px;color:#66738a;font-size:10px;line-height:1.35;word-break:break-word}.tcggo-step.ok .tcggo-step-title{color:#176a2d}.tcggo-step.error .tcggo-step-title{color:#c52b2b}.tcggo-step.info .tcggo-step-title{color:#24304a}.tcggo-price-note{display:block;margin-top:4px;font-size:9px;color:#78849b}
 </style>
 <style id="pokescan-compact-result">
 .result{padding:10px!important}
@@ -648,6 +651,7 @@ function closeScan(){
   const btn=document.getElementById('scanNow');
   if(btn){btn.disabled=false;btn.textContent='🔎 Reconocer carta';}
   setSaveEnabled(false);
+  const tcg=document.getElementById('tcggoAnalyzer'); if(tcg) tcg.style.display='none';
 }
 async function startCamera(){
   const session=scanSession;
@@ -929,6 +933,7 @@ async function applyManualCardCode(inputId){
           x.source=String(serverCard.source||'').trim();
           x.sourceUrl=String(serverCard.sourceUrl||'').trim();
           x.cardmarketNameEnglish=String(serverCard.cardmarketNameEnglish||'').trim();
+          x.setNameEnglish=String(serverCard.setNameEnglish||'').trim();
           x.cardmarketExactUrl=String(serverCard.cardmarketExactUrl||'').trim();
           x.lang=selectedLang;
           x.language_code=selectedLang==='Japonés'?'JA':(Object.entries(langMap).find(([,v])=>v===selectedLang)?.[0]||'');
@@ -970,6 +975,7 @@ async function applyManualCardCode(inputId){
         const cmId=hit?.pricing?.cardmarket?.idProduct||hit?.thirdParty?.cardmarket||hit?.cardmarketProductId||'';
         if(cmId)x.cardmarketProductId=String(cmId);
         if(hit?.cardmarketNameEnglish)x.cardmarketNameEnglish=String(hit.cardmarketNameEnglish).trim();
+        if(hit?.setNameEnglish)x.setNameEnglish=String(hit.setNameEnglish).trim();
         if(hit?.cardmarketExactUrl)x.cardmarketExactUrl=String(hit.cardmarketExactUrl).trim();
         if(hit.image && !x.imageUrl) x.imageUrl=String(hit.image).trim();
         if(!x.imageUrl){
@@ -997,8 +1003,67 @@ async function applyManualCardCode(inputId){
   if(top)top.value='';
   if(bottom)bottom.value='';
   setSaveEnabled(!!String(x.name||'').trim());
+  if(x.name) updateTCGGOPrice({...x,kind:currentKind,lang:selectedManualLang});
   const result=document.getElementById('result');
   if(result)setTimeout(()=>result.scrollIntoView({behavior:'smooth',block:'start'}),30);
+}
+
+function renderTCGGOAnalyzer(steps,errorText=''){
+  const box=document.getElementById('tcggoAnalyzer');
+  if(!box)return;
+  box.style.display='block';
+  const rows=(steps||[]).map((st,i)=>{
+    const status=st.status||'info';
+    const icon=status==='ok'?'✅':status==='error'?'❌':'ℹ️';
+    return `<div class="tcggo-step ${status}"><div class="tcggo-step-title">${icon} ${esc(st.label||('Paso '+(i+1)))}</div><div class="tcggo-step-detail">${esc(st.detail||'')}</div></div>`;
+  }).join('');
+  const result=errorText?`<div class="tcggo-result error">❌ Resultado: ${esc(errorText)}</div>`:'';
+  box.innerHTML=`<div class="tcggo-analyzer-head"><span>🔎 Analizador TCGGO</span><button type="button" class="tcggo-analyzer-close" onclick="document.getElementById('tcggoAnalyzer').style.display='none'">×</button></div>${result}${rows}`;
+}
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+async function updateTCGGOPrice(x){
+  x=x||window.lastRecognition||{};
+  if(currentKind!=='card' && currentKind!=='graded')return;
+  const code=String(x.set_code||x.expansion_code||x.code||'').trim().toUpperCase();
+  const number=String(x.collector_number||x.number||'').trim().split('/')[0];
+  const nameEnglish=String(x.cardmarketNameEnglish||x.nameEnglish||'').trim();
+  const setNameEnglish=String(x.setNameEnglish||x.expansionEnglish||'').trim();
+  const language=String(document.getElementById('lang')?.value||x.lang||'Español').trim();
+  const market=document.getElementById('market');
+  if(!code||!number||!nameEnglish||!setNameEnglish){
+    if(market)market.value='0';
+    renderTCGGOAnalyzer([{label:'1. Entrada',detail:'Faltan código, número, nombre inglés o expansión inglesa de TCGdex.',status:'error'}],'No hay datos suficientes para consultar TCGGO.');
+    return;
+  }
+  const initial=[
+    {label:'1. Entrada',detail:`${code} ${number} · idioma ${language}`,status:'ok'},
+    {label:'2. Identificador',detail:`Código + número: ${code} ${number}`,status:'ok'},
+    {label:'3. TCGGO',detail:`Preparando consulta dinámica para ${nameEnglish} · ${setNameEnglish}`,status:'info'}
+  ];
+  renderTCGGOAnalyzer(initial);
+  if(market)market.value='0';
+  try{
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),22000);
+    let r;
+    try{
+      r=await fetch('/api/tcggo-price',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,number,nameEnglish,setNameEnglish,language}),signal:controller.signal});
+    }finally{clearTimeout(timer);}
+    const j=await r.json().catch(()=>({error:'Respuesta no válida del servidor.'}));
+    renderTCGGOAnalyzer(j.steps||initial,j.error||(!r.ok?'Error consultando TCGGO.':''));
+    if(r.ok && Number.isFinite(Number(j.price))){
+      if(market)market.value=Number(j.price).toFixed(2);
+      window.lastRecognition={...window.lastRecognition,...x,tcggoPrice:Number(j.price),tcggoUrl:j.url||''};
+      const note=document.createElement('span');
+      note.className='tcggo-price-note';
+      note.textContent='Fuente: TCGGO · '+language+' / Europe';
+      market?.parentElement?.appendChild(note);
+    }else if(market){market.value='0';}
+  }catch(e){
+    const msg=e?.name==='AbortError'?'La consulta TCGGO superó el límite de 22 s.':(e?.message||'Error de conexión.');
+    renderTCGGOAnalyzer(initial,msg);
+    if(market)market.value='0';
+  }
 }
 
 function setCardmarketLink(x){
@@ -1007,11 +1072,10 @@ function setCardmarketLink(x){
   if(!box||!link)return;
   const exact=(x.kind==='card'||x.kind==='graded')?getCardmarketUrl(x):'';
   const url=exact||((x.kind==='card'||x.kind==='graded')?buildCardmarketSearchUrl(x):(x.marketUrl||buildCardmarketSearchUrl(x)));
-  if(!url){box.style.display='none'; if(typeof updateTCGGOPrice==='function') updateTCGGOPrice(x); return;}
+  if(!url){box.style.display='none';return;}
   link.href=url;
   link.textContent='🛒 Cardmarket';
   box.style.display='block';
-  if(typeof updateTCGGOPrice==='function') updateTCGGOPrice(x);
 }
 
 function populateExpansionOptions(selected){
@@ -1202,6 +1266,7 @@ async function enrichCardFromTCGdex(x){
           if(cmId)x.cardmarketProductId=String(cmId);
           if(hit.imageUrl||hit.image) x.imageUrl=String(hit.imageUrl||hit.image).trim();
           if(hit.cardmarketNameEnglish)x.cardmarketNameEnglish=String(hit.cardmarketNameEnglish).trim();
+          if(hit.setNameEnglish)x.setNameEnglish=String(hit.setNameEnglish).trim();
           x.source=String(hit.source||x.source||'').trim();
           x.sourceUrl=String(hit.sourceUrl||x.sourceUrl||'').trim();
           x.language_code=langCode; x.lang=selectedLang;
@@ -1296,6 +1361,7 @@ function fillRecognition(x){
       if(y.expansion) populateExpansionOptions(y.expansion);
       setCardmarketLink({...y,kind:currentKind,lang:langEl?.value||y.lang});
       setSaveEnabled(!!String(y.name||'').trim());
+      if(y.name) updateTCGGOPrice({...y,kind:currentKind,lang:langEl?.value||y.lang});
       return y;
     }).catch(()=>{
       setSaveEnabled(false);
@@ -3307,44 +3373,6 @@ function handleCustomExpansionLogo(input){const file=input&&input.files&&input.f
 loadSharedExpansionLogos();</script>
 
 <div id="expLogoModal" aria-hidden="true" onclick="if(event.target===this)closeExpansionLogoSelector()"><div class="logo-sheet"><div class="logo-top"><b id="expLogoModalTitle">Elegir logo</b><button type="button" class="logo-close" onclick="closeExpansionLogoSelector()">×</button></div><div class="logo-custom"><label for="expLogoFile">＋ Añadir mi propio logo</label><input id="expLogoFile" type="file" accept="image/*" onchange="handleCustomExpansionLogo(this)"></div><div id="expLogoGrid" class="logo-grid"></div></div></div>
-
-
-<script id="pokescan-tcggo">
-let tcggoPriceRequestId=0;
-async function updateTCGGOPrice(x){
-  const input=document.getElementById('market');
-  if(!input || !x || (x.kind && !['card','graded'].includes(x.kind))) return;
-  const requestId=++tcggoPriceRequestId;
-  const code=String(x?.setCode||x?.set_code||x?.code||'').trim().toUpperCase();
-  const number=String(x?.number||x?.collector_number||'').split('/')[0].trim();
-  const langName=String(document.getElementById('lang')?.value||x?.lang||'Español').trim();
-  const langMap={'Español':'es','Inglés':'en','Japonés':'ja','Francés':'fr','Alemán':'de','Italiano':'it','Portugués':'pt','Coreano':'ko','Chino':'zh'};
-  const lang=langMap[langName]||'es';
-  if(!code||!number)return;
-  const panel=document.getElementById('tcggoDebug'),body=document.getElementById('tcggoDebugBody');
-  if(panel&&body){panel.style.display='block';body.innerHTML='<div>⏳ Iniciando análisis…</div>'}
-  input.value=''; input.placeholder='Consultando TCGGO…';
-  const renderTrace=(j)=>{if(!panel||!body)return;const rows=(j?.steps||[]).map(st=>{const icon=st.status==='OK'?'✅':st.status==='ERROR'?'❌':'ℹ️';let extra='';if(st.data){try{const d=JSON.stringify(st.data,null,2);extra='<details style="margin-top:3px"><summary>Ver detalle</summary><pre style="white-space:pre-wrap;max-height:220px;overflow:auto;font-size:10px">'+esc(d)+'</pre></details>'}catch(e){}}return '<div style="padding:5px 0;border-bottom:1px solid #e3e8f2"><b>'+icon+' '+esc(st.step)+'</b> — '+esc(st.detail||'')+extra+'</div>'}).join('');body.innerHTML=rows||'<div>Sin trazas.</div>'};
-  try{
-    const params=new URLSearchParams({code,number,lang,nameEnglish:String(x?.cardmarketNameEnglish||x?.nameEnglish||'').trim(),name:String(x?.name||'').trim(),setName:String(x?.set||x?.expansion||'').trim()});
-    const r=await fetch('/api/tcggo-debug?'+params.toString(),{cache:'no-store'});
-    let j={};try{j=await r.json()}catch(e){}
-    if(requestId!==tcggoPriceRequestId)return;
-    renderTrace(j);
-    if(!r.ok||!j?.ok)throw new Error(j?.steps?.find(s=>s.status==='ERROR')?.detail||'No se encontró el precio en TCGGO');
-    const resultStep=(j.steps||[]).find(s=>s.step==='10. Resultado');
-    const price=Number(resultStep?.data?.price);
-    if(!Number.isFinite(price))throw new Error('El analizador no devolvió un precio válido');
-    input.value=price.toFixed(2); input.placeholder='Precio actual (€)'; input.title='Precio TCGGO · Cardmarket · '+langName;
-    return j;
-  }catch(e){
-    if(requestId!==tcggoPriceRequestId)return;
-    input.value=''; input.placeholder='No disponible'; input.title=e?.message||'No se pudo consultar TCGGO';
-    if(panel&&body){body.insertAdjacentHTML('afterbegin','<div style="padding:7px;background:#fff0f0;border-radius:8px;margin-bottom:7px"><b>❌ Resultado:</b> '+esc(e?.message||String(e))+'</div>')}
-    console.warn('TCGGO:',e);
-  }
-}
-</script>
 
 <script id="pokescan-pricecharting">
 async function priceChartingLookupForGraded(x){
