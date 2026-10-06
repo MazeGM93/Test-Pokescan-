@@ -3518,8 +3518,17 @@ async function fetchPriceChartingIndicativePrice(id){
     const code=String(x?.set_code||x?.setCode||x?.expansion_code||x?.code||'').trim().toUpperCase();
     const number=numericNumber(x?.number||x?.collector_number||'');
     const lang=String(x?.lang||document.getElementById('lang')?.value||'Español').trim();
-    const nameEnglish=String(x?.cardmarketNameEnglish||x?.nameEnglish||x?.name||'').trim();
+    let nameEnglish=String(x?.cardmarketNameEnglish||x?.nameEnglish||x?.name||'').trim();
     const tcggoSetEnglish=String(x?.tcggoSetEnglish||x?.setEnglish||'').trim();
+    // Japanese cards are displayed with their Japanese printed name, but the existing
+    // TCGGO locator works with English name + card number. Resolve only the English
+    // name for the TCGGO request; do not change the visible Japanese card name.
+    if(lang==='Japonés' && code && number){
+      try{
+        const jpHit=await fetchJapaneseScannerName(code,number);
+        if(jpHit?.englishName) nameEnglish=String(jpHit.englishName).trim();
+      }catch(e){}
+    }
     if(!code||!number)return;
     const seq=++requestSeq; if(controller)controller.abort(); controller=new AbortController();
     const market=document.getElementById('market'); if(market)market.value='';
