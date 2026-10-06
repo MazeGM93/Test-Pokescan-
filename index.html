@@ -706,10 +706,10 @@ async function recognizeCurrentFrame(){
   const requestSession=scanSession;
   recognitionAbortController=new AbortController();
   try{
-    // Una sola petición a Gemini: enviamos la carta completa + el zoom interno
-    // en la misma solicitud. Así evitamos dos llamadas secuenciales y reducimos
-    // mucho la espera sin perder la lectura especializada del código/número.
-    document.getElementById('scanStatus').textContent='Leyendo código y número…';
+    // El servidor hace dos lecturas independientes en paralelo y solo hace una tercera
+    // si las dos primeras no coinciden. Así el escáner valida el código sin tocar
+    // el motor manual que ya funciona.
+    document.getElementById('scanStatus').textContent='Verificando código y número…';
     const r=await fetch('/api/identify-card',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image,codeImage,currentKind,scanStage:'full_with_code'}),signal:recognitionAbortController.signal});
     const j=await r.json();
     if(!r.ok) throw new Error(j.error||'No se pudo reconocer la carta');
