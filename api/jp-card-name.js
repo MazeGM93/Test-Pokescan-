@@ -31,8 +31,37 @@ module.exports = async function handler(req, res) {
     const im=html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
       || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
 
+    // Para Cardmarket necesitamos el nombre internacional/inglés, no el nombre
+    // japonés impreso. Lo resolvemos para CUALQUIER carta japonesa por el mismo
+    // código + número. Probamos variantes de mayúsculas/minúsculas porque Limitless
+    // normaliza los códigos japoneses de forma distinta según la expansión.
+    let englishName='';
+    const codeVariants=[...new Set([code, code.toLowerCase(),
+      /^[A-Z]{1,4}\d+[A-Z]$/.test(rawCode) ? rawCode.slice(0,-1)+rawCode.slice(-1).toLowerCase() : rawCode])];
+    for(const c of codeVariants){
+      const enUrls=[
+        `https://limitlesstcg.com/cards/en/${encodeURIComponent(c)}/${encodeURIComponent(n)}`,
+        `https://limitlesstcg.com/cards/${encodeURIComponent(c)}/${encodeURIComponent(n)}`
+      ];
+      for(const enUrl of enUrls){
+        try{
+          const er=await fetch(enUrl,{headers:{'User-Agent':'Mozilla/5.0 (compatible; PokeScan/1.0)','Accept':'text/html,application/xhtml+xml'},cache:'no-store'});
+          if(!er.ok) continue;
+          const eh=await er.text();
+          const em=eh.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+          let en=strip(em?.[1]||'');
+          en=en.replace(/\s*[-–—]\s*(?:[A-Za-z][^<]*?)?\s*\([^)]*\)\s*#?\d+.*$/,'').trim();
+          if(en && !/[\u3040-\u30ff\u3400-\u9fff]/.test(en)){englishName=en;break;}
+        }catch(e){}
+      }
+      if(englishName) break;
+    }
+
     return res.status(200).json({
-      name,
+      name: englishName || name,
+      japaneseName: name,
+      englishName,
+      cardmarketNameEnglish:englishName,
       imageUrl:im?.[1]||'',
       source:'Limitless JP',
       sourceUrl:url
