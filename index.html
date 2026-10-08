@@ -1414,7 +1414,7 @@ function fillRecognition(x){
       if(y.expansion) populateExpansionOptions(y.expansion);
       setCardmarketLink({...y,kind:currentKind,lang:langEl?.value||y.lang});
       setSaveEnabled(!!String(y.name||'').trim());
-      await fetchPokeItemPrice({...y,kind:currentKind,lang:langEl?.value||y.lang},'Reconocimiento');
+      fetchPokeItemPrice({...y,kind:currentKind,lang:langEl?.value||y.lang},'Reconocimiento');
       return y;
     }).catch(()=>{
       setSaveEnabled(false);
