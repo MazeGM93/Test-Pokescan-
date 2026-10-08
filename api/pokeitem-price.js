@@ -104,7 +104,7 @@ async function fetchPage(url){
   return {ok:r.ok,status:r.status,url:r.url,html};
 }
 
-export default async function handler(req,res){
+module.exports = async function handler(req,res){
   const trace=[];
   try{
     if(req.method!=='POST') return res.status(405).json({ok:false,error:'Método no permitido',trace});
