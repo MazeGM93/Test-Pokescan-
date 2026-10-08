@@ -877,13 +877,27 @@ function isCardmarketUrl(u){
 }
 function getCardmarketUrl(x){
   const manual=String(x?.marketUrlExact||x?.marketUrlManual||'').trim();
-  if(manual && isCardmarketUrl(manual)) return manual;
+  if(manual && isCardmarketUrl(manual)){
+    // Para japonesas, fuerza SIEMPRE el filtro de idioma de Cardmarket.
+    // Así también corregimos enlaces antiguos guardados sin ?language=7.
+    const jp=isJapaneseSetCode(String(x?.set_code||x?.expansion_code||x?.code||'').trim().toUpperCase()) || String(x?.lang||x?.language||'').trim()==='Japonés';
+    if(jp){
+      try{ const u=new URL(manual); u.searchParams.set('language','7'); return u.toString(); }catch(e){}
+    }
+    return manual;
+  }
   // Solo un enlace manual fijado bloquea la generación automática.
   if(x?.marketUrlManualLocked) return '';
   const inferred={...x, set_code:inferCardmarketCode(x)};
-  // Los enlaces automáticos de cartas van SIEMPRE al buscador general.
-  // Los enlaces exactos solo se usan cuando el usuario los ha pegado manualmente.
-  return buildCardmarketSearchUrl(inferred);
+  let url=buildCardmarketSearchUrl(inferred);
+  // Garantía final: si la carta es japonesa, el enlace debe llevar el ID de idioma 7.
+  // El número de carta ya va en la consulta/producto; el filtro de idioma de Cardmarket
+  // usa el ID 7 para japonés.
+  const jp=isJapaneseSetCode(String(inferred?.set_code||inferred?.expansion_code||inferred?.code||'').trim().toUpperCase()) || String(inferred?.lang||inferred?.language||'').trim()==='Japonés';
+  if(jp && url && isCardmarketUrl(url)){
+    try{ const u=new URL(url); u.searchParams.set('language','7'); return u.toString(); }catch(e){}
+  }
+  return url;
 }
 function parseManualCardCode(raw){
   const s=String(raw||'').trim().toUpperCase().replace(/[#·]/g,' ').replace(/[\-_–—]+/g,' ').replace(/\s+/g,' ');
