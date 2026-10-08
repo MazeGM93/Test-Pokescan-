@@ -1493,11 +1493,22 @@ function renderPokeItemDiag(lines,okState){
   el.className='pokeitem-diag '+(okState===true?'ok':okState===false?'fail':'');
   el.innerHTML='<b>PokéItem</b> · '+arr.map(v=>String(v||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')).join('<br>');
 }
+function renderTCGGODiag(lines,okState){
+  const el=document.getElementById('pokeItemDiag');
+  if(!el)return;
+  const arr=Array.isArray(lines)?lines:[];
+  el.style.display='block';
+  el.className='pokeitem-diag '+(okState===true?'ok':okState===false?'fail':'');
+  el.innerHTML='<b>TCGGO</b> · '+arr.map(v=>String(v||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')).join('<br>');
+}
 
 async function fetchPokeItemPrice(x,reason){
   const language=String(x?.lang||x?.language||document.getElementById('lang')?.value||'Español').trim();
+  // Japonés: TCGGO es ahora la fuente de búsqueda y precio.
+  // No pasa por PokéItem ni por el método japonés antiguo.
   if(language==='Japonés'){
-    renderPokeItemDiag(['⏭ Japonés: se mantiene el sistema actual.'],null);
+    if(typeof window.updateTCGGOPrice==='function') return window.updateTCGGOPrice({...x,kind:x?.kind||currentKind,lang:language,reason});
+    renderTCGGODiag(['❌ TCGGO no está disponible en esta versión.'],false);
     return null;
   }
   // Inglés: usa TCGGO directamente con los datos que ya están en la plantilla.
@@ -1566,13 +1577,13 @@ async function fetchPokeItemPrice(x,reason){
     // Si por alguna razón aún no están disponibles, se usa el dato actual como respaldo.
     const name=String(x?.nameEnglish||x?.cardmarketNameEnglish||x?.name||document.getElementById('name')?.value||'').trim();
     const expansion=String(x?.tcggoSetEnglish||x?.setEnglish||x?.expansion||x?.set||document.getElementById('set')?.value||'').trim();
-    if(!code||!number){renderPokeItemDiag(['⏸ Faltan código o número para TCGGO.'],false);return null;}
+    if(!code||!number){renderTCGGODiag(['⏸ Faltan código o número para TCGGO.'],false);return null;}
     const seq=++requestSeq;
     if(controller)controller.abort();
     controller=new AbortController();
     const market=document.getElementById('market');
     if(market)market.value='';
-    renderPokeItemDiag([
+    renderTCGGODiag([
       '⏳ TCGGO → '+code+' '+number+' · '+lang,
       'Datos de la plantilla: '+(name||'sin nombre')+' · '+(expansion||'sin expansión'),
       'Buscando la ficha directamente con código + número…'
@@ -1592,14 +1603,14 @@ async function fetchPokeItemPrice(x,reason){
         const val=Number(j.price);
         if(market)market.value=val.toFixed(2);
         window.lastRecognition={...(window.lastRecognition||{}),tcggoPrice:val,tcggoPriceDisplay:j.priceDisplay||'',tcggoUrl:j.url||'',tcggoSource:'TCGGO'};
-        renderPokeItemDiag(trace,true);
+        renderTCGGODiag(trace,true);
         return j;
       }
-      renderPokeItemDiag(trace.length?trace:['❌ '+String(j?.error||('TCGGO HTTP '+r.status))],false);
+      renderTCGGODiag(trace.length?trace:['❌ '+String(j?.error||('TCGGO HTTP '+r.status))],false);
       return j;
     }catch(e){
       if(seq!==requestSeq)return null;
-      renderPokeItemDiag(['❌ TCGGO: '+(e?.name==='AbortError'?'Tiempo de espera agotado.':String(e?.message||e))],false);
+      renderTCGGODiag(['❌ TCGGO: '+(e?.name==='AbortError'?'Tiempo de espera agotado.':String(e?.message||e))],false);
       return null;
     }
   };
