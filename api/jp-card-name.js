@@ -22,11 +22,37 @@ module.exports = async function handler(req, res) {
       .replace(/&quot;|&#x22;/gi,'"').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>')
       .replace(/\s+/g,' ').trim();
 
+    const cleanText=s=>strip(String(s||'').replace(/\s+/g,' '));
+    const extractCandidates=html=>{
+      const out=[];
+      const push=v=>{v=cleanText(v); if(v && !out.includes(v)) out.push(v)};
+      for(const re of [
+        /<h1[^>]*>([\s\S]*?)<\/h1>/i,
+        /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
+        /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i,
+        /<title[^>]*>([\s\S]*?)<\/title>/i
+      ]){
+        const m=html.match(re); if(m?.[1]) push(m[1]);
+      }
+      return out;
+    };
+    const extractEnglishName=html=>{
+      const candidates=extractCandidates(html);
+      for(const raw of candidates){
+        let v=raw
+          .replace(/\s*[–—]\s*Limitless.*$/i,'')
+          .replace(/\s*\|\s*Limitless.*$/i,'')
+          .trim();
+        // Typical translated page title: "Ethan's Ho-Oh ex - Heat Wave Arena (SV9a) #77"
+        const m=v.match(/^(.+?)\s+[-–—]\s+.+?\s*\([A-Za-z0-9-]+\)\s*#?\d+/);
+        if(m?.[1]) v=m[1].trim();
+        if(v && !/[\u3040-\u30ff\u3400-\u9fff]/.test(v) && /[A-Za-z]/.test(v)) return v;
+      }
+      return '';
+    };
     const parseName=html=>{
-      const h1m=html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-      let name=strip(h1m?.[1]||'');
-      name=name.replace(/\s*[-–—]\s*(?:[A-Za-z][^<]*?)?\s*\([^)]*\)\s*#?\d+.*$/,'').trim();
-      return name;
+      const candidates=extractCandidates(html);
+      return candidates[0]||'';
     };
 
     let japaneseName='';
@@ -38,21 +64,25 @@ module.exports = async function handler(req, res) {
     // same page. ?translate=en is the reliable bridge from JP code+number to the
     // English name (e.g. SV9A 76 -> Yanmega ex).
     for(const c of codeVariants){
-      const jpUrl=`https://limitlesstcg.com/cards/jp/${encodeURIComponent(c)}/${encodeURIComponent(n)}?translate=en`;
-      try{
-        const r=await fetch(jpUrl,{headers:{'User-Agent':'Mozilla/5.0 (compatible; PokeScan/1.0)','Accept':'text/html,application/xhtml+xml'},cache:'no-store'});
-        if(!r.ok) continue;
-        const html=await r.text();
-        const name=parseName(html);
-        if(name && !/^[A-Za-z0-9 .,'’&+\-:()]+$/.test(name)) japaneseName=name;
-        // On the translated Limitless page the h1 is the English/international name.
-        if(name && !/[\u3040-\u30ff\u3400-\u9fff]/.test(name)) englishName=name;
-        const im=html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
-          || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-        if(im?.[1]) imageUrl=im[1];
-        sourceUrl=jpUrl;
-        if(englishName) break;
-      }catch(e){}
+      const base=`https://limitlesstcg.com/cards/jp/${encodeURIComponent(c)}/${encodeURIComponent(n)}`;
+      const urls=[`${base}?translate=en`,`${base}?lang=en.t`,`${base}?translate=en&lang=en.t`,base];
+      for(const jpUrl of urls){
+        try{
+          const r=await fetch(jpUrl,{headers:{'User-Agent':'Mozilla/5.0 (compatible; PokeScan/1.0)','Accept':'text/html,application/xhtml+xml'},cache:'no-store'});
+          if(!r.ok) continue;
+          const html=await r.text();
+          const name=parseName(html);
+          if(name && !/^[A-Za-z0-9 .,'’&+\-:()]+$/.test(name)) japaneseName=name;
+          const translated=extractEnglishName(html);
+          if(translated) englishName=translated;
+          const im=html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+            || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+          if(im?.[1]) imageUrl=im[1];
+          sourceUrl=jpUrl;
+          if(englishName) break;
+        }catch(e){}
+      }
+      if(englishName) break;
     }
 
     // Fallback: TCGdex English card endpoint. This covers Japanese expansions
