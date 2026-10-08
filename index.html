@@ -855,7 +855,7 @@ function buildCardmarketSearchUrl(x){
     const englishName=String(x?.cardmarketNameEnglish||'').trim();
     const searchName=String(x?.cardmarketSearchName||cardmarketSearchName(englishName)).trim();
     const jpQuery=searchName ? (searchName+' '+String(jpNumber).replace(/^0+/,'')) : (jpCode+' '+padded);
-    return 'https://www.cardmarket.com/es/Pokemon/Products/Search?searchString='+encodeURIComponent(jpQuery)+'&searchMode=v2&mode=gallery&language=7';
+    return 'https://www.cardmarket.com/es/Pokemon/Products/Search?searchString='+encodeURIComponent(jpQuery)+'&searchMode=v2&mode=gallery&language=7&idLanguage=7';
   }
   return 'https://www.cardmarket.com/es/Pokemon/Products/Search?searchString='+encodeURIComponent(query)+'&searchMode=v2&mode=gallery&language='+languageId;
 }
@@ -882,7 +882,7 @@ function getCardmarketUrl(x){
     // Así también corregimos enlaces antiguos guardados sin ?language=7.
     const jp=isJapaneseSetCode(String(x?.set_code||x?.expansion_code||x?.code||'').trim().toUpperCase()) || String(x?.lang||x?.language||'').trim()==='Japonés';
     if(jp){
-      try{ const u=new URL(manual); u.searchParams.set('language','7'); return u.toString(); }catch(e){}
+      try{ const u=new URL(manual); u.searchParams.set('language','7'); u.searchParams.set('idLanguage','7'); return u.toString(); }catch(e){}
     }
     return manual;
   }
@@ -895,7 +895,7 @@ function getCardmarketUrl(x){
   // usa el ID 7 para japonés.
   const jp=isJapaneseSetCode(String(inferred?.set_code||inferred?.expansion_code||inferred?.code||'').trim().toUpperCase()) || String(inferred?.lang||inferred?.language||'').trim()==='Japonés';
   if(jp && url && isCardmarketUrl(url)){
-    try{ const u=new URL(url); u.searchParams.set('language','7'); return u.toString(); }catch(e){}
+    try{ const u=new URL(url); u.searchParams.set('language','7'); u.searchParams.set('idLanguage','7'); return u.toString(); }catch(e){}
   }
   return url;
 }
