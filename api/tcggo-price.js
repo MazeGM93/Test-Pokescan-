@@ -42,12 +42,18 @@ function rawNumber(n){
 function identityMatches(text, code, number, name){
   const t=norm(text);
   const c=norm(code);
-  const n=rawNumber(number);
-  if(!c || !n) return false;
-  const codeNum=norm(`${code} ${n}`);
+  if(!c || !number) return false;
+  // TCGGO displays promo numbers in several equivalent forms, e.g.
+  // SVP-014 / SVP014 / SVP-14 and MEP-033 / MEP033. Accept the
+  // zero-padded and non-padded forms while keeping the stored number intact.
+  const nums=searchNumberVariants(code,number).map(rawNumber);
   const compact=t.replace(/\s+/g,'');
-  const codeCompact=(c+n).replace(/\s+/g,'');
-  const hasCodeNum=t.includes(codeNum) || compact.includes(codeCompact);
+  const hasCodeNum=nums.some(n=>{
+    const codeNum=norm(`${code} ${n}`);
+    const codeCompact=(c+n).replace(/\s+/g,'');
+    const paddedCodeCompact=(c+String(number).split('/')[0].trim()).replace(/\s+/g,'');
+    return t.includes(codeNum) || compact.includes(codeCompact) || compact.includes(paddedCodeCompact);
+  });
   if(!hasCodeNum) return false;
   if(name){
     const nn=norm(name);
@@ -265,24 +271,38 @@ async function apiLookup({name,number,cardmarketId,code,steps,add}){
 async function publicSearch({name,number,code,steps,add}){
   const nums=searchNumberVariants(code,number);
   const queries=[];
+  const seenQueries=new Set();
+  const addQuery=q=>{
+    q=String(q||'').trim();
+    if(!q)return;
+    const key=q.toLowerCase();
+    if(seenQueries.has(key))return;
+    seenQueries.add(key);
+    // IMPORTANT: use TCGGO's real global search, filtered to Singles.
+    queries.push(`https://www.tcggo.com/search?q=${encodeURIComponent(q)}&type=singles`);
+  };
+
   for(const n of nums){
-    const q1=`${code||''} ${n}`.trim();
-    const q2=`${name||''} ${n}`.trim();
-    const q3=`${name||''} ${code||''} ${n}`.replace(/\s+/g,' ').trim();
-    // Main TCGGO search first. Try code+number, then name+number and finally
-    // the strongest combined identity: name + set code + collector number.
-    queries.push(`https://www.tcggo.com/pokemon?search=${encodeURIComponent(q1)}`);
-    if(name) queries.push(`https://www.tcggo.com/pokemon?search=${encodeURIComponent(q2)}`);
-    if(name && code) queries.push(`https://www.tcggo.com/pokemon?search=${encodeURIComponent(q3)}`);
-  }
-  // Keep the Japanese main-search surface only as a fallback for cases where
-  // the general Pokémon search does not expose the Japanese card link.
-  for(const n of nums){
-    const q1=`${code||''} ${n}`.trim();
-    queries.push(`https://www.tcggo.com/pokemon-jp?search=${encodeURIComponent(q1)}`);
+    const isPromo=/^(MEP|SVP)$/i.test(code);
+    const forms=isPromo
+      ? [`${code}-${n}`,`${code} ${n}`]
+      : [`${code} ${n}`,`${code}-${n}`];
+    for(const q of forms)addQuery(q);
+    if(name){
+      addQuery(`${name} ${n}`);
+      addQuery(`${name} ${code} ${n}`);
+      addQuery(`${name} ${code}-${n}`);
+    }
   }
 
-  add('Búsqueda TCGGO',`Buscando en el buscador principal: ${queries.slice(0,3).map(u=>decodeURIComponent(new URL(u).searchParams.get('search')||'')).join(' · ')}`);
+  // Japanese/general fallback remains available, but the primary route above
+  // is always TCGGO's global Singles search.
+  for(const n of nums){
+    addQuery(`${code} ${n}`);
+  }
+
+  const preview=queries.slice(0,6).map(u=>decodeURIComponent(new URL(u).searchParams.get('q')||'')).join(' · ');
+  add('Búsqueda TCGGO',`Buscando en TCGGO /search?type=singles: ${preview}`);
 
   const results=await Promise.all([...new Set(queries)].map(async target=>{
     try{
@@ -293,7 +313,7 @@ async function publicSearch({name,number,code,steps,add}){
     }
   }));
 
-  // First pass: only actual TCGGO card links, never product links.
+  // First pass: actual TCGGO card links from the global Singles search.
   for(const r of results){
     const candidates=collectCandidates(r.text,code,number,name);
     if(candidates.length){
@@ -306,18 +326,21 @@ async function publicSearch({name,number,code,steps,add}){
     }
   }
 
-  // Second pass: if the result page uses different formatting, look for any
-  // TCGGO card URL near the requested code/number, tolerating 77 vs 077.
+  // Second pass: tolerate search-result formatting where the code/number is
+  // separated by punctuation or zero-padding.
   const targetNums=nums.map(rawNumber);
   for(const r of results){
     const re=/https?:\/\/(?:www\.)?tcggo\.com\/pokemon(?:-jp)?\/[^\s)"'<]+/gi;
     let m;
     while((m=re.exec(r.text))){
       const u=m[0];
-      const context=r.text.slice(Math.max(0,m.index-800),Math.min(r.text.length,m.index+1200));
+      const context=r.text.slice(Math.max(0,m.index-1000),Math.min(r.text.length,m.index+1600));
       const compact=norm(context).replace(/\s+/g,'');
       const codeOk=compact.includes(norm(code));
-      const numOk=targetNums.some(n=>compact.includes(norm(`${code} ${n}`).replace(/\s+/g,'')));
+      const numOk=targetNums.some(n=>{
+        const variants=[n,String(number).split('/')[0].trim().replace(/^0+/,'')];
+        return variants.some(v=>compact.includes((norm(code)+v).replace(/\s+/g,'')));
+      });
       if(codeOk && numOk){
         const abs=absoluteTcggoUrl(u);
         if(abs){
@@ -328,7 +351,7 @@ async function publicSearch({name,number,code,steps,add}){
     }
   }
 
-  steps.push({title:'Búsqueda pública',ok:false,detail:`No se encontró una ficha de carta para ${code} ${number}.`});
+  steps.push({title:'Búsqueda pública',ok:false,detail:`No se encontró una ficha de carta para ${code} ${number} en TCGGO.`});
   return '';
 }
 
