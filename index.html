@@ -1437,22 +1437,31 @@ function renderPokeItemDiag(lines,okState){
 
 async function fetchPokeItemPrice(x,reason){
   const language=String(x?.lang||x?.language||document.getElementById('lang')?.value||'Español').trim();
-  const code=String(x?.set_code||x?.expansion_code||x?.code||'').trim().toUpperCase();
-  const number=String(x?.collector_number||x?.number||document.getElementById('number')?.value||'').trim();
-  const name=String(x?.name||document.getElementById('name')?.value||'').trim();
   if(language==='Japonés'){
     renderPokeItemDiag(['⏭ Japonés: se mantiene el sistema actual.'],null);
     return null;
   }
+  // Inglés: usa TCGGO directamente con los datos que ya están en la plantilla.
+  // No vuelve a consultar TCGdex para identificar la carta.
+  if(language==='Inglés'){
+    if(typeof window.updateTCGGOPrice==='function') return window.updateTCGGOPrice({...x,kind:x?.kind||currentKind,lang:language,reason});
+    renderPokeItemDiag(['❌ TCGGO no está disponible en esta versión.'],false);
+    return null;
+  }
+
+  const code=String(x?.set_code||x?.expansion_code||x?.code||'').trim().toUpperCase();
+  const number=String(x?.collector_number||x?.number||document.getElementById('number')?.value||'').trim();
+  const name=String(x?.name||document.getElementById('name')?.value||'').trim();
+  const expansion=String(x?.expansion||x?.set||document.getElementById('set')?.value||'').trim();
   if(!code||!number){
     renderPokeItemDiag(['⏸ Faltan código o número para consultar el precio.'],false);
     return null;
   }
   const market=document.getElementById('market');
   if(market)market.value='';
-  renderPokeItemDiag(['⏳ '+reason+' → '+code+' '+number+' · '+language,'Consultando PokéItem → Cardmarket NM…'],null);
+  renderPokeItemDiag(['⏳ '+reason+' → '+code+' '+number+' · '+language,'Datos: '+(name||'sin nombre')+' · '+(expansion||'sin expansión'),'Buscando la carta directamente con esos datos…'],null);
   try{
-    const r=await fetch('/api/pokeitem-price',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,number,language,name,setId:String(x?.tcgdexSetId||x?.setId||'')})});
+    const r=await fetch('/api/pokeitem-price',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,number,language,name,expansion,setId:String(x?.tcgdexSetId||x?.setId||'')})});
     const j=await r.json().catch(()=>({}));
     const trace=Array.isArray(j?.trace)?j.trace:[];
     if(j?.ok && Number.isFinite(Number(j.price))){
@@ -1467,6 +1476,55 @@ async function fetchPokeItemPrice(x,reason){
     return null;
   }
 }
+
+// Precio TCGGO para inglés. Reutiliza el analizador pequeño de PokeScan.
+(function(){
+  let requestSeq=0;
+  let controller=null;
+  window.updateTCGGOPrice=async function(x){
+    const code=String(x?.set_code||x?.setCode||x?.expansion_code||x?.code||'').trim().toUpperCase();
+    const number=String(x?.number||x?.collector_number||'').split('/')[0].trim();
+    const lang=String(x?.lang||document.getElementById('lang')?.value||'Inglés').trim();
+    const name=String(x?.cardmarketNameEnglish||x?.nameEnglish||x?.name||document.getElementById('name')?.value||'').trim();
+    const expansion=String(x?.tcggoSetEnglish||x?.setEnglish||x?.expansion||x?.set||document.getElementById('set')?.value||'').trim();
+    if(!code||!number){renderPokeItemDiag(['⏸ Faltan código o número para TCGGO.'],false);return null;}
+    const seq=++requestSeq;
+    if(controller)controller.abort();
+    controller=new AbortController();
+    const market=document.getElementById('market');
+    if(market)market.value='';
+    renderPokeItemDiag([
+      '⏳ TCGGO → '+code+' '+number+' · '+lang,
+      'Datos de la plantilla: '+(name||'sin nombre')+' · '+(expansion||'sin expansión'),
+      'Buscando la ficha directamente con código + número…'
+    ],null);
+    try{
+      const timeout=setTimeout(()=>controller?.abort(),18000);
+      const r=await fetch('/api/tcggo-price',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,number,nameEnglish:name,setEnglish:expansion,lang,cardmarketProductId:String(x?.cardmarketProductId||'').trim()}),signal:controller.signal});
+      clearTimeout(timeout);
+      let j={}; try{j=await r.json()}catch(e){}
+      if(seq!==requestSeq)return null;
+      const steps=Array.isArray(j?.steps)?j.steps:[];
+      const trace=steps.map(s=>{
+        const icon=s.ok===true?'✓ ':s.ok===false?'✗ ':'';
+        return icon+String(s.title||'Paso')+(s.detail?' — '+String(s.detail):'');
+      });
+      if(j?.ok && Number.isFinite(Number(j.price))){
+        const val=Number(j.price);
+        if(market)market.value=val.toFixed(2);
+        window.lastRecognition={...(window.lastRecognition||{}),tcggoPrice:val,tcggoPriceDisplay:j.priceDisplay||'',tcggoUrl:j.url||'',tcggoSource:'TCGGO'};
+        renderPokeItemDiag(trace,true);
+        return j;
+      }
+      renderPokeItemDiag(trace.length?trace:['❌ '+String(j?.error||('TCGGO HTTP '+r.status))],false);
+      return j;
+    }catch(e){
+      if(seq!==requestSeq)return null;
+      renderPokeItemDiag(['❌ TCGGO: '+(e?.name==='AbortError'?'Tiempo de espera agotado.':String(e?.message||e))],false);
+      return null;
+    }
+  };
+})();
 
 async function saveItem(){
   // Esperamos el enriquecimiento TCGdex si está en curso para guardar también el idProduct de Cardmarket.
