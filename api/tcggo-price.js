@@ -377,15 +377,20 @@ module.exports = async function handler(req,res){
     const searchNums=searchNumberVariants(code,number);
     add('Consulta',`TCGGO probará: ${searchNums.map(n=>`${code} ${n}`).join(' · ')}`,true);
 
+    const isJapanese=/^Japon[eé]s$/i.test(language) || /^Japanese$/i.test(language);
     let card=null;
     let cardPage=null;
-    try{card=await apiLookup({name,number,cardmarketId,code,steps,add});}catch(e){
-      steps.push({title:'API TCGGO',ok:false,detail:e?.message||'No disponible'});
+    // Japonés: no usamos la API genérica ni la ruta directa inglesa.
+    // La búsqueda debe pasar siempre por el buscador TCGGO del catálogo JP.
+    if(!isJapanese){
+      try{card=await apiLookup({name,number,cardmarketId,code,steps,add});}catch(e){
+        steps.push({title:'API TCGGO',ok:false,detail:e?.message||'No disponible'});
+      }
+      if(card?.url){
+        add('TCGGO ficha','La API devolvió directamente la ficha exacta.',true);
+      }
     }
-    if(card?.url){
-      add('TCGGO ficha','La API devolvió directamente la ficha exacta.',true);
-    }
-    if(!card?.url){
+    if(!card?.url && !isJapanese){
       const useDirect = !/^MEP$/i.test(code) && !/^SVP$/i.test(code) && !/^SV9A$/i.test(code);
       const direct=useDirect ? directUrlFromKnown(name,setName,number,code) : '';
       if(direct){
