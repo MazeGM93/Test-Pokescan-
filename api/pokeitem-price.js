@@ -85,23 +85,37 @@ function absolutePokeItemUrl(href){
   return 'https://app.pokeitem.fr/'+h;
 }
 
+const SET_ALIASES={
+  PFL:['Llamas Fantasmales','Phantasmal Flames','Fuegos Fantasmales']
+};
+
+function expansionCandidates(expansion,code){
+  const out=[];
+  const add=v=>{v=String(v||'').trim();if(v&&!out.some(x=>normalizeText(x)===normalizeText(v)))out.push(v)};
+  add(expansion);
+  for(const v of (SET_ALIASES[String(code||'').toUpperCase()]||[])) add(v);
+  return out;
+}
+
 async function findSetPage(expansion, code, trace){
   const catalog=await fetchPage('https://app.pokeitem.fr/collection/cartes');
   trace.push('2. PokéItem catálogo: HTTP '+catalog.status);
   if(!catalog.ok) return null;
   const links=extractLinks(catalog.html);
-  const wanted=normalizeText(expansion);
+  const wantedList=expansionCandidates(expansion,code).map(normalizeText).filter(Boolean);
   const codeNorm=normalizeText(code).replace(/ /g,'');
   const candidates=links.filter(x=>/\/collection\/cartes\//i.test(x.href));
   let best=null,score=-1;
   for(const x of candidates){
     const t=normalizeText(x.text);
     let s=0;
-    if(wanted && t===wanted)s+=100;
-    if(wanted && t.includes(wanted))s+=70;
-    if(wanted && wanted.includes(t) && t.length>2)s+=50;
-    if(codeNorm && t.replace(/ /g,'')===codeNorm)s+=80;
-    if(/pokemon 151/.test(t) && /151/.test(wanted))s+=90;
+    for(const wanted of wantedList){
+      if(t===wanted)s=Math.max(s,100);
+      if(wanted && t.includes(wanted))s=Math.max(s,70);
+      if(wanted && wanted.includes(t) && t.length>2)s=Math.max(s,50);
+    }
+    if(codeNorm && t.replace(/ /g,'')===codeNorm)s=Math.max(s,80);
+    if(wantedList.some(w=>/pokemon 151/.test(t)&&/151/.test(w)))s=Math.max(s,90);
     if(s>score){score=s;best=x;}
   }
   if(!best || score<50) return null;
