@@ -4,10 +4,25 @@ async function findLimitlessEnglishName(code, number) {
   const c=String(code||'').trim().toUpperCase();
   const n=String(number||'').split('/')[0].trim().replace(/^0+/,'') || String(number||'').trim();
   if(!c||!n) return '';
-  const urls=[
-    `https://limitlesstcg.com/cards/en/${encodeURIComponent(c)}/${encodeURIComponent(n)}`,
-    `https://limitlesstcg.com/cards/${encodeURIComponent(c)}/${encodeURIComponent(n)}`
-  ];
+  const variants=[...new Set([c,c.toLowerCase(),/^[A-Z]{1,4}\d+[A-Z]$/.test(c)?c.slice(0,-1)+c.slice(-1).toLowerCase():c])];
+  for(const v of variants){
+    const jpTranslated=`https://limitlesstcg.com/cards/jp/${encodeURIComponent(v)}/${encodeURIComponent(n)}?translate=en`;
+    try{
+      const r=await fetch(jpTranslated,{headers:{'User-Agent':'Mozilla/5.0 (compatible; PokeScan/1.0)','Accept':'text/html,application/xhtml+xml'},cache:'no-store'});
+      if(!r.ok) continue;
+      const html=await r.text();
+      const m=html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+      let name=String(m?.[1]||'').replace(/<[^>]+>/g,' ').replace(/&amp;/gi,'&').replace(/&#39;|&#x27;/gi,"'").replace(/&quot;|&#x22;/gi,'"').replace(/\s+/g,' ').trim();
+      name=name.replace(/\s*[-–—]\s*(?:30th Celebration|[^-–—]+)?\s*\([^)]*\)\s*#?\d+.*$/i,'').trim();
+      if(name && !/[\u3040-\u30ff\u3400-\u9fff]/.test(name)) return name;
+    }catch(e){}
+  }
+  // Legacy direct English pages remain a fallback for non-Japanese-style codes.
+  const urls=[];
+  for(const v of variants){
+    urls.push(`https://limitlesstcg.com/cards/en/${encodeURIComponent(v)}/${encodeURIComponent(n)}`);
+    urls.push(`https://limitlesstcg.com/cards/${encodeURIComponent(v)}/${encodeURIComponent(n)}`);
+  }
   for(const url of urls){
     try{
       const r=await fetch(url,{headers:{'User-Agent':'Mozilla/5.0 (compatible; PokeScan/1.0)','Accept':'text/html,application/xhtml+xml'},cache:'no-store'});
