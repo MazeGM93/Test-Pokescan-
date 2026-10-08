@@ -209,13 +209,24 @@ module.exports = async function handler(req, res) {
               const image=String(card.image||'').trim();
               const imageUrl=await resolveTcgdexImage(image);
               let englishName=String(card.name||'').trim();
-              // Si la búsqueda preferida fue español, recuperamos también el nombre
-              // inglés para construir slugs exactos de Cardmarket cuando sea posible.
-              if(String(lang).toLowerCase()!=='en'){
+              let englishSetName='';
+              // La plantilla sigue usando el idioma solicitado (normalmente español),
+              // pero guardamos POR DETRÁS la misma carta y expansión en inglés.
+              // Esto evita mantener una tabla manual de traducciones y sirve también
+              // para expansiones futuras que TCGdex vaya añadiendo.
+              try{
+                const enUrl=`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(discoveredSetId+'-'+cleanNum)}`;
+                const er=await fetch(enUrl,{headers:{Accept:'application/json'},cache:'no-store'});
+                if(er.ok){
+                  const ec=await er.json();
+                  if(ec&&String(ec.name||'').trim()) englishName=String(ec.name).trim();
+                  if(ec?.set?.name) englishSetName=String(ec.set.name).trim();
+                }
+              }catch(e){}
+              if(!englishSetName){
                 try{
-                  const enUrl=`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(discoveredSetId+'-'+cleanNum)}`;
-                  const er=await fetch(enUrl,{headers:{Accept:'application/json'},cache:'no-store'});
-                  if(er.ok){const ec=await er.json();if(ec&&String(ec.name||'').trim())englishName=String(ec.name).trim();}
+                  const esu=await fetch(`https://api.tcgdex.net/v2/en/sets/${encodeURIComponent(discoveredSetId)}`,{headers:{Accept:'application/json'},cache:'no-store'});
+                  if(esu.ok){const esj=await esu.json(); if(esj?.name) englishSetName=String(esj.name).trim();}
                 }catch(e){}
               }
               const cardmarketProductId=String(card?.pricing?.cardmarket?.idProduct||card?.thirdParty?.cardmarket||'').trim();
@@ -235,7 +246,7 @@ module.exports = async function handler(req, res) {
                 const cm=await findCardmarketExact(code,cleanNum,'ja',englishName);
                 if(cm?.cardmarketExactUrl) cardmarketExactUrl=cm.cardmarketExactUrl;
               }
-              return res.status(200).json({...card,image,imageUrl:imageUrl||image,cardmarketProductId,cardmarketExactUrl,cardmarketNameEnglish:englishName,source:'TCGdex',sourceUrl:url});
+              return res.status(200).json({...card,image,imageUrl:imageUrl||image,cardmarketProductId,cardmarketExactUrl,cardmarketNameEnglish:englishName,nameEnglish:englishName,tcggoSetEnglish:englishSetName,source:'TCGdex',sourceUrl:url});
             }
           }catch(e){}
         }

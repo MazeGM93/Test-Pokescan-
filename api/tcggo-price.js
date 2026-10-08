@@ -185,12 +185,41 @@ function searchNumberVariants(code, number){
   return out;
 }
 
-function directUrlFromKnown(nameEnglish,setName,number){
+const SET_SLUG_BY_CODE={
+  PFL:'phantasmal-flames',
+  DRI:'destined-rivals',
+  BLK:'black-bolt',
+  WHT:'white-flare',
+  MEG:'mega-evolution',
+  ME01:'mega-evolution',
+  ME02:'phantasmal-flames',
+  SSP:'surging-sparks',
+  SFA:'shrouded-fable',
+  TWM:'twilight-masquerade',
+  TEF:'temporal-forces',
+  PAR:'paradox-rift',
+  OBF:'obsidian-flames',
+  PAL:'paldea-evolved',
+  SVI:'scarlet-violet',
+  PAF:'paldean-fates',
+  MEW:'pokemon-151',
+  CRZ:'crown-zenith',
+  SIT:'silver-tempest',
+  LOR:'lost-origin',
+  ASR:'astral-radiance',
+  BRS:'brilliant-stars',
+  EVS:'evolving-skies',
+  FST:'fusion-strike',
+  CRE:'chilling-reign',
+  BST:'battle-styles'
+};
+function directUrlFromKnown(nameEnglish,setName,number,code){
   const slug=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/['’]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+    .replace(/['’]/g,'').replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
   if(!nameEnglish||!number)return '';
-  if(!setName)return '';
-  return `https://www.tcggo.com/pokemon/${slug(setName)}/${slug(nameEnglish)}-${rawNumber(number)}`;
+  const setSlug=SET_SLUG_BY_CODE[String(code||'').trim().toUpperCase()]||slug(setName);
+  if(!setSlug)return '';
+  return `https://www.tcggo.com/pokemon/${setSlug}/${slug(nameEnglish)}-${rawNumber(number)}`;
 }
 async function fetchCardPage(url){
   const proxy='https://r.jina.ai/'+url;
@@ -331,7 +360,7 @@ module.exports = async function handler(req,res){
     }
     if(!card?.url){
       const useDirect = !/^MEP$/i.test(code) && !/^SVP$/i.test(code) && !/^SV9A$/i.test(code);
-      const direct=useDirect ? directUrlFromKnown(name,setName,number) : '';
+      const direct=useDirect ? directUrlFromKnown(name,setName,number,code) : '';
       if(direct){
         add('Ruta directa',direct);
         try{
