@@ -135,7 +135,8 @@ module.exports = async function handler(req, res) {
     const localId=String(body.localId||body.number||'').trim();
     const langs=Array.isArray(body.langs)&&body.langs.length?body.langs.map(x=>String(x).trim()).filter(Boolean):['en','es'];
     if(!localId||(!setId&&!code))return res.status(400).json({error:'Faltan código y número de carta.'});
-    const cleanNum=localId.split('/')[0].trim();
+    const rawLocalNum=localId.split('/')[0].trim();
+    const cleanNum=(code==='MEP'||code==='SVP') ? rawLocalNum.padStart(3,'0') : rawLocalNum;
     const uniqueLangs=[...new Set(langs)];
     const decode=s=>String(s||'').replace(/&amp;/gi,'&').replace(/&#39;|&#x27;|&#039;/gi,"'").replace(/&quot;|&#x22;/gi,'"').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n))).replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCharCode(parseInt(n,16)));
     const strip=x=>decode(String(x||'').replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim();

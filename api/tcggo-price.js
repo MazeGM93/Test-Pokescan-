@@ -339,7 +339,8 @@ module.exports = async function handler(req,res){
   try{
     const b=req.body||{};
     const code=String(b.code||b.setCode||'').trim().toUpperCase();
-    const number=String(b.number||b.collectorNumber||'').trim().split('/')[0];
+    let number=String(b.number||b.collectorNumber||'').trim().split('/')[0];
+    if((/^MEP$/i.test(String(b.code||'')) || /^SVP$/i.test(String(b.code||''))) && /^\d+$/.test(number)) number=number.padStart(3,'0');
     const name=String(b.nameEnglish||b.name||'').trim();
     const setName=String(b.setEnglish||b.tcggoSetEnglish||b.set||'').trim();
     const language=String(b.lang||b.language||'Español').trim();
