@@ -72,8 +72,6 @@ function collectCandidates(text, code, number, name){
   const add=(url,context)=>{
     const u=absoluteTcggoUrl(url);
     if(!u || seen.has(u)) return;
-    // El código + número es la identidad principal. El nombre puede estar
-    // traducido (p. ej. Maya/Dawn), así que no debe bloquear una coincidencia exacta.
     const ok=identityMatches(context||text,code,number,'') ||
       identityMatches(u,code,number,'');
     if(ok){seen.add(u);out.push({url:u,context:String(context||'').slice(0,1200)});}
@@ -241,9 +239,12 @@ async function publicSearch({name,number,code,steps,add}){
   for(const n of nums){
     const q1=`${code||''} ${n}`.trim();
     const q2=`${name||''} ${n}`.trim();
-    // Main TCGGO search first. This is the same public search a user sees.
+    const q3=`${name||''} ${code||''} ${n}`.replace(/\s+/g,' ').trim();
+    // Main TCGGO search first. Try code+number, then name+number and finally
+    // the strongest combined identity: name + set code + collector number.
     queries.push(`https://www.tcggo.com/pokemon?search=${encodeURIComponent(q1)}`);
     if(name) queries.push(`https://www.tcggo.com/pokemon?search=${encodeURIComponent(q2)}`);
+    if(name && code) queries.push(`https://www.tcggo.com/pokemon?search=${encodeURIComponent(q3)}`);
   }
   // Keep the Japanese main-search surface only as a fallback for cases where
   // the general Pokémon search does not expose the Japanese card link.
@@ -354,7 +355,7 @@ module.exports = async function handler(req,res){
     else steps.push({title:'Página TCGGO',ok:true,detail:`Ficha ya validada; ${page.text.length} caracteres`});
     if(page.status!==200) return res.status(502).json({ok:false,error:'TCGGO no devolvió la ficha.',steps,url:card.url});
     const identity=identityMatches(page.text,code,number,'');
-    steps.push({title:'Identidad ficha',ok:identity,detail:identity?`Coincide ${code} ${number}. El nombre no bloquea la coincidencia porque puede cambiar por idioma.`:'La ficha no contiene una coincidencia suficiente.'});
+    steps.push({title:'Identidad ficha',ok:identity,detail:identity?`Coincide ${code} ${number}.`:'La ficha no contiene una coincidencia suficiente.'});
     if(!identity)return res.status(409).json({ok:false,error:'La ficha encontrada no coincide exactamente con código+número.',steps,url:card.url});
     const parsed=parseLanguagePrice(page.text,language);
     if(!parsed){
