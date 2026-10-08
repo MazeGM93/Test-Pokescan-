@@ -748,8 +748,20 @@ async function recognizeCurrentFrame(){
   }
   finally{if(requestSession===scanSession){btn.disabled=false;btn.textContent='🔎 Reconocer carta';} recognitionAbortController=null;}
 }
+function decodeHtmlEntitiesClient(s){
+  return String(s||'')
+    .replace(/&amp;/gi,'&').replace(/&#39;|&#x27;|&#039;/gi,"'")
+    .replace(/&quot;|&#x22;|&#034;/gi,'\"')
+    .replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCharCode(parseInt(n,16)));
+}
+function cardmarketSearchName(s){
+  let v=decodeHtmlEntitiesClient(s).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+  v=v.replace(/^[^\s]+(?:['’]s)\s+/i,'');
+  return v.trim();
+}
 function cardmarketSlug(s){
-  return String(s||'').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/&/g,'and').replace(/[^a-zA-Z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  return decodeHtmlEntitiesClient(s).trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/&/g,'and').replace(/[^a-zA-Z0-9]+/g,'-').replace(/^-+|-+$/g,'');
 }
 function cardmarketLanguageIdFor(x){
   const lang=String(x?.lang||x?.language||'Inglés').trim();
@@ -841,7 +853,8 @@ function buildCardmarketSearchUrl(x){
     // no por el nombre japonés impreso. Usamos el nombre inglés recuperado por
     // TCGdex/Limitless y el número como respaldo si no se encontró una ficha exacta.
     const englishName=String(x?.cardmarketNameEnglish||'').trim();
-    const jpQuery=englishName ? (englishName+' '+String(jpNumber).replace(/^0+/,'')) : (jpCode+' '+padded);
+    const searchName=String(x?.cardmarketSearchName||cardmarketSearchName(englishName)).trim();
+    const jpQuery=searchName ? (searchName+' '+String(jpNumber).replace(/^0+/,'')) : (jpCode+' '+padded);
     return 'https://www.cardmarket.com/es/Pokemon/Products/Search?searchString='+encodeURIComponent(jpQuery)+'&searchMode=v2&mode=gallery&language=7';
   }
   return 'https://www.cardmarket.com/es/Pokemon/Products/Search?searchString='+encodeURIComponent(query)+'&searchMode=v2&mode=gallery&language='+languageId;
@@ -959,7 +972,7 @@ async function applyManualCardCode(inputId){
           // El idioma de la carta sigue siendo Japonés: solo cambiamos el texto del nombre
           // para que la búsqueda posterior en Cardmarket use el mismo nombre que su catálogo.
           if(japaneseCode && x.cardmarketNameEnglish && !containsJapaneseText(x.cardmarketNameEnglish)){
-            x.name=x.cardmarketNameEnglish;
+            x.name=decodeHtmlEntitiesClient(x.cardmarketNameEnglish);
           }
           x.lang=selectedLang;
           x.language_code=selectedLang==='Japonés'?'JA':(Object.entries(langMap).find(([,v])=>v===selectedLang)?.[0]||'');
@@ -1000,10 +1013,11 @@ async function applyManualCardCode(inputId){
         if(japaneseCode){x.language_code='JA';x.lang='Japonés';}
         const cmId=hit?.pricing?.cardmarket?.idProduct||hit?.thirdParty?.cardmarket||hit?.cardmarketProductId||'';
         if(cmId)x.cardmarketProductId=String(cmId);
-        if(hit?.cardmarketNameEnglish)x.cardmarketNameEnglish=String(hit.cardmarketNameEnglish).trim();
+        if(hit?.cardmarketNameEnglish)x.cardmarketNameEnglish=decodeHtmlEntitiesClient(String(hit.cardmarketNameEnglish)).trim();
+          if(hit?.cardmarketSearchName)x.cardmarketSearchName=String(hit.cardmarketSearchName).trim();
         if(hit?.cardmarketExactUrl)x.cardmarketExactUrl=String(hit.cardmarketExactUrl).trim();
         if(japaneseCode && x.cardmarketNameEnglish && !containsJapaneseText(x.cardmarketNameEnglish)){
-          x.name=x.cardmarketNameEnglish;
+          x.name=decodeHtmlEntitiesClient(x.cardmarketNameEnglish);
         }
         if(hit.image && !x.imageUrl) x.imageUrl=String(hit.image).trim();
         if(!x.imageUrl){
@@ -1024,10 +1038,10 @@ async function applyManualCardCode(inputId){
         // para Cardmarket (p. ej. SV9A 77 -> Ethan's Ho-Oh ex).
         const enName=await fetchJapaneseEnglishName(parsed.code,target);
         if(enName){
-          x.cardmarketNameEnglish=enName;
+          x.cardmarketNameEnglish=decodeHtmlEntitiesClient(enName);
           x.name=enName;
         }else if(x.cardmarketNameEnglish && !containsJapaneseText(x.cardmarketNameEnglish)){
-          x.name=x.cardmarketNameEnglish;
+          x.name=decodeHtmlEntitiesClient(x.cardmarketNameEnglish);
         }
       }
     }catch(e){ console.warn('Resolución manual:',e); }
@@ -1271,11 +1285,12 @@ async function enrichCardFromTCGdex(x){
           const cmId=hit?.pricing?.cardmarket?.idProduct||hit?.thirdParty?.cardmarket||hit?.cardmarketProductId||'';
           if(cmId)x.cardmarketProductId=String(cmId);
           if(hit.imageUrl||hit.image) x.imageUrl=String(hit.imageUrl||hit.image).trim();
-          if(hit.cardmarketNameEnglish)x.cardmarketNameEnglish=String(hit.cardmarketNameEnglish).trim();
+          if(hit.cardmarketNameEnglish)x.cardmarketNameEnglish=decodeHtmlEntitiesClient(String(hit.cardmarketNameEnglish)).trim();
           if(japaneseCode){
             const enName=await fetchJapaneseEnglishName(code,target);
-            if(enName) x.cardmarketNameEnglish=enName;
-            if(x.cardmarketNameEnglish && !containsJapaneseText(x.cardmarketNameEnglish)) x.name=x.cardmarketNameEnglish;
+            if(enName) x.cardmarketNameEnglish=decodeHtmlEntitiesClient(enName);
+            if(x.cardmarketNameEnglish && !containsJapaneseText(x.cardmarketNameEnglish)) x.name=decodeHtmlEntitiesClient(x.cardmarketNameEnglish);
+            if(!x.cardmarketSearchName && x.cardmarketNameEnglish) x.cardmarketSearchName=cardmarketSearchName(x.cardmarketNameEnglish);
           }
           x.source=String(hit.source||x.source||'').trim();
           x.sourceUrl=String(hit.sourceUrl||x.sourceUrl||'').trim();
