@@ -930,6 +930,19 @@ function getCardmarketUrl(x){
   }
   return forceCardmarketLanguageUrl(url,inferred);
 }
+function formatCollectorNumberForCode(code, value){
+  const c=String(code||'').trim().toUpperCase();
+  const s=String(value||'').trim();
+  if(!s) return s;
+  const parts=s.split('/');
+  const raw=String(parts[0]||'').trim();
+  if((c==='MEP' || c==='SVP') && /^\d+$/.test(raw)){
+    const padded=raw.replace(/^0+/,'').padStart(3,'0');
+    return parts.length>1 ? padded+'/'+parts.slice(1).join('/') : padded;
+  }
+  return s;
+}
+
 function parseManualCardCode(raw){
   const s=String(raw||'').trim().toUpperCase().replace(/[#·]/g,' ').replace(/[\-_–—]+/g,' ').replace(/\s+/g,' ');
   if(!s)return null;
@@ -952,6 +965,7 @@ async function applyManualCardCode(inputId){
   const input=document.getElementById(inputId||'manualCardCode');
   const raw=String(input?.value||'').trim();
   const parsed=parseManualCardCode(raw);
+  if(parsed) parsed.number=formatCollectorNumberForCode(parsed.code,parsed.number);
   if(!parsed){
     document.getElementById('scanStatus').textContent='Código no reconocido. Usa formato como PFL 02, DRI 218 o 30C 002.';
     return;
@@ -992,7 +1006,7 @@ async function applyManualCardCode(inputId){
       const preferred=selectedLang==='Español'?'es':(selectedLang==='Japonés'?'ja':selectedLang==='Francés'?'fr':selectedLang==='Alemán'?'de':selectedLang==='Italiano'?'it':selectedLang==='Portugués'?'pt':selectedLang==='Coreano'?'ko':'en');
       const langs=preferred==='ja'?['ja','en','es']:[preferred,preferred==='es'?'en':'es'];
       const parsedNum=String(parsed.number).split('/')[0].trim();
-      const target=parsed.code==='30C' ? parsedNum.padStart(3,'0') : (parsedNum.replace(/^0+/,'')||parsedNum);
+      const target=(parsed.code==='MEP'||parsed.code==='SVP') ? parsedNum.padStart(3,'0') : (parsed.code==='30C' ? parsedNum.padStart(3,'0') : (parsedNum.replace(/^0+/,'')||parsedNum));
       let hit=null;
 
       // El servidor intenta primero TCGdex y, si no existe, Limitless.
@@ -1073,7 +1087,7 @@ async function applyManualCardCode(inputId){
           x.imageUrl='/api/card-image?'+p.toString();
         }
         const total=Number(hit?.set?.cardCount?.total||0)||0;
-        if(total && !String(parsed.number).includes('/'))x.number=String(parsed.number).replace(/^0+/,'')+'/'+total;
+        if(total && !String(parsed.number).includes('/'))x.number=formatCollectorNumberForCode(parsed.code,String(parsed.number))+'/'+total;
       }
 
       // Si TCGdex no entregó el nombre inglés pero la carta es japonesa,
@@ -1314,7 +1328,7 @@ async function enrichCardFromTCGdex(x){
   try{
     const code=normalizeSetCode(x?.set_code||x?.expansion_code||x?.code||'');
     const rawNum=String(x?.collector_number||x?.number||'').trim().split('/')[0];
-    const num=code==='30C' ? rawNum.padStart(3,'0') : (rawNum.replace(/^0+/,'')||rawNum);
+    const num=(code==='MEP'||code==='SVP') ? rawNum.padStart(3,'0') : (code==='30C' ? rawNum.padStart(3,'0') : (rawNum.replace(/^0+/,'')||rawNum));
     if(!code || !num) return x;
 
     // El idioma del escáner lo controla el selector manual. Gemini no decide el idioma.
@@ -1328,7 +1342,7 @@ async function enrichCardFromTCGdex(x){
     // No buscamos primero por nombre, porque Gemini puede reconocer el nombre pero
     // dejar vacío el nombre de la expansión. El código+número son la identidad fiable.
     try{
-      const target=code==='30C'?String(rawNum).padStart(3,'0'):(String(rawNum).replace(/^0+/,'')||String(rawNum));
+      const target=(code==='MEP'||code==='SVP')?String(rawNum).padStart(3,'0'):(code==='30C'?String(rawNum).padStart(3,'0'):(String(rawNum).replace(/^0+/,'')||String(rawNum)));
       const r=await fetch('/api/card-lookup',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -1366,7 +1380,8 @@ async function enrichCardFromTCGdex(x){
           x.sourceUrl=String(hit.sourceUrl||x.sourceUrl||'').trim();
           x.language_code=langCode; x.lang=selectedLang;
           const total=Number(hit?.set?.cardCount?.total||0)||0;
-          if(total && !String(x.number||'').includes('/')) x.number=String(rawNum).replace(/^0+/,'')+'/'+total;
+          if(total && !String(x.number||'').includes('/')) x.number=formatCollectorNumberForCode(code,String(rawNum))+'/'+total;
+          else x.number=formatCollectorNumberForCode(code,String(x.number||rawNum));
           return x;
         }
       }
@@ -1414,6 +1429,8 @@ function fillRecognition(x){
   let __num=String(x.collector_number||x.number||'').trim();
   const __identity=promoIdentityFallback(x);
   if(__identity){ __code=__identity[0]; __num=__identity[1]; x.name=__identity[2]; x.number=__identity[1]; x.expansion=__identity[3]; }
+  __num=formatCollectorNumberForCode(__code,__num);
+  if(__num) x.number=String(x.number||'').includes('/') ? formatCollectorNumberForCode(__code,x.number) : __num;
   const __promoExp=promoParentExpansion(__code,__num,x.expansion);
   const __exp=__isJapanese ? String(x.expansion||'') : (__promoExp || expansionFromCollector(__code,__num));
   if(__code) x.set_code=__code;
@@ -1861,7 +1878,8 @@ function toggleExpansion(id){
 const CARD_IMAGE_SET_IDS={SVP:'svp',SM:'smp',MEP:'mep','30C':'30c',DRI:'sv10',JTG:'sv09',PRE:'sv08.5',PAF:'sv04.5',SSP:'sv08',SCR:'sv07',SFA:'sv06.5',TWM:'sv06',TEF:'sv05',PAR:'sv04',MEW:'sv03.5',OBF:'sv03',PAL:'sv02',SVI:'sv01',MEG:'me01',PFL:'me02',PHF:'me02',ASC:'me02.5',POR:'me03',CRI:'me04',PBL:'me05',CRZ:'swsh12.5',SIT:'swsh12',LOR:'swsh11',PGO:'swsh10.5',ASR:'swsh10',BRS:'swsh9',FST:'swsh8',EVS:'swsh7',CRE:'swsh6',BST:'swsh5',SHF:'swsh4.5',VIV:'swsh4',CPA:'swsh3.5',DAA:'swsh3',RCL:'swsh2',SSH:'swsh1'};
 function tcgdexCardIdentity(code,number){
   const c=normalizeSetCode(code);
-  const n=String(number||'').trim().split('/')[0].replace(/^0+/,'')||String(number||'').trim();
+  const rawN=String(number||'').trim().split('/')[0];
+  const n=(c==='MEP'||c==='SVP') ? rawN.padStart(3,'0') : (rawN.replace(/^0+/,'')||rawN);
   if(c==='SM') return {setId:'smp',localId:'SM'+n};
   return {setId:CARD_IMAGE_SET_IDS[c]||'',localId:n};
 }
@@ -3356,7 +3374,7 @@ async function resolveGradedCode(){
   }
 
   const parsedNum=String(parsed.number).split('/')[0].trim();
-  const target=parsed.code==='30C' ? parsedNum.padStart(3,'0') : (parsedNum.replace(/^0+/,'')||parsedNum);
+  const target=(parsed.code==='MEP'||parsed.code==='SVP') ? parsedNum.padStart(3,'0') : (parsed.code==='30C' ? parsedNum.padStart(3,'0') : (parsedNum.replace(/^0+/,'')||parsedNum));
   const sid=(typeof CARD_IMAGE_SET_IDS!=='undefined'&&CARD_IMAGE_SET_IDS[parsed.code])
     ? CARD_IMAGE_SET_IDS[parsed.code]
     : (japaneseCode?parsed.code.toLowerCase():'');
@@ -3400,7 +3418,7 @@ async function resolveGradedCode(){
       }
       gradedCardmarketProductId=String(c?.cardmarketProductId||c?.pricing?.cardmarket?.idProduct||c?.thirdParty?.cardmarket||'').trim();
       if(c?.set?.cardCount?.total && !String(parsed.number).includes('/')){
-        document.getElementById('gradedNumber').value=String(parsed.number).replace(/^0+/,'')+'/'+Number(c.set.cardCount.total);
+        document.getElementById('gradedNumber').value=formatCollectorNumberForCode(parsed.code,String(parsed.number))+'/'+Number(c.set.cardCount.total);
       }
       document.getElementById('gradedEditTitle').textContent=parsed.code+' '+parsed.number+' — datos encontrados. Revisa la graduación y guarda.';
     }else{
