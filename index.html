@@ -768,6 +768,23 @@ function cardmarketLanguageIdFor(x){
   const map={Español:4,Inglés:1,Japonés:7,Francés:2,Alemán:3,Italiano:5,Portugués:8,Coreano:10};
   return map[lang]||1;
 }
+function forceCardmarketLanguageUrl(url,x){
+  const raw=String(url||'').trim();
+  if(!raw || !isCardmarketUrl(raw)) return raw;
+  const lang=String(x?.lang||x?.language||'Inglés').trim();
+  const id=String(cardmarketLanguageIdFor(x));
+  try{
+    const u=new URL(raw);
+    // Cardmarket uses BOTH parameters for the offer-language filter.
+    // Keep the Japanese behavior untouched; for every other language force
+    // the same pair used by known-working links such as DRI235.
+    if(lang!=='Japonés'){
+      u.searchParams.set('language',id);
+      u.searchParams.set('idLanguage',id);
+    }
+    return u.toString();
+  }catch(e){ return raw; }
+}
 function cardmarketProductUrl(productId, x){
   const id=String(productId||'').trim();
   if(!/^\d+$/.test(id)) return '';
@@ -808,8 +825,8 @@ function buildCardmarketExactUrl(x){
       // solo cambiamos `language`, por eso mantenemos ambos parámetros alineados.
       u.searchParams.set('language',id);
       u.searchParams.set('idLanguage',id);
-      return u.toString();
-    }catch(e){ return apiExact; }
+      return forceCardmarketLanguageUrl(u.toString(),x);
+    }catch(e){ return forceCardmarketLanguageUrl(apiExact,x); }
   }
 
   // Para el resto de cartas, si TCGdex nos entrega idProduct lo conservamos como respaldo.
@@ -896,9 +913,9 @@ function getCardmarketUrl(x){
       const id=String(cardmarketLanguageIdFor(x));
       u.searchParams.set('language',id);
       u.searchParams.set('idLanguage',id);
-      return u.toString();
+      return forceCardmarketLanguageUrl(u.toString(),x);
     }catch(e){}
-    return manual;
+    return forceCardmarketLanguageUrl(manual,x);
   }
   // Solo un enlace manual fijado bloquea la generación automática.
   if(x?.marketUrlManualLocked) return '';
@@ -911,7 +928,7 @@ function getCardmarketUrl(x){
   if(jp && url && isCardmarketUrl(url)){
     try{ const u=new URL(url); u.searchParams.set('language','7'); u.searchParams.delete('idLanguage'); return u.toString(); }catch(e){}
   }
-  return url;
+  return forceCardmarketLanguageUrl(url,inferred);
 }
 function parseManualCardCode(raw){
   const s=String(raw||'').trim().toUpperCase().replace(/[#·]/g,' ').replace(/[\-_–—]+/g,' ').replace(/\s+/g,' ');
@@ -1114,6 +1131,7 @@ function setCardmarketLink(x){
     }catch(e){}
   }
   if(!url){box.style.display='none';return;}
+  if(!jp) url=forceCardmarketLanguageUrl(url,x);
   link.href=url;
   link.textContent='🛒 Cardmarket';
   box.style.display='block';
