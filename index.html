@@ -1084,7 +1084,18 @@ function setCardmarketLink(x){
   const link=document.getElementById('marketLink');
   if(!box||!link)return;
   const exact=(x.kind==='card'||x.kind==='graded')?getCardmarketUrl(x):'';
-  const url=exact||((x.kind==='card'||x.kind==='graded')?buildCardmarketSearchUrl(x):(x.marketUrl||buildCardmarketSearchUrl(x)));
+  let url=exact||((x.kind==='card'||x.kind==='graded')?buildCardmarketSearchUrl(x):(x.marketUrl||buildCardmarketSearchUrl(x)));
+  // Última garantía para japonesas: Cardmarket's web filter MUST receive language=7.
+  // Esto corrige incluso una URL exacta que venga de TCGdex/servidor con language=1.
+  const jp=isJapaneseSetCode(String(x?.set_code||x?.expansion_code||x?.code||'').trim().toUpperCase()) || String(x?.lang||x?.language||'').trim()==='Japonés';
+  if(jp && url && isCardmarketUrl(url)){
+    try{
+      const u=new URL(url);
+      u.searchParams.set('language','7');
+      u.searchParams.delete('idLanguage');
+      url=u.toString();
+    }catch(e){}
+  }
   if(!url){box.style.display='none';return;}
   link.href=url;
   link.textContent='🛒 Cardmarket';
