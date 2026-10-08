@@ -107,7 +107,18 @@ async function findCardmarketExact(code, number, preferredLang='en', englishName
         if(name) name=name.replace(/\bEx\b/g,'ex');
         const setName=decodeURIComponent(setSlug).replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
         const langId=({es:4,en:1,fr:2,de:3,it:5,pt:8,ja:7,ko:10}[String(preferredLang||'en').toLowerCase()]||1);
-        const exact=absolute+(absolute.includes('?')?'&':'?')+'language='+langId+'&idLanguage='+langId;
+        // Cardmarket's product-page filter uses `language` in the web URL.
+        // For Japanese listings it MUST be 7; never inherit the default English (1)
+        // from a previously generated/external URL.
+        let exact=absolute;
+        try{
+          const eu=new URL(absolute);
+          eu.searchParams.set('language', langId);
+          eu.searchParams.delete('idLanguage');
+          exact=eu.toString();
+        }catch(e){
+          exact=absolute+(absolute.includes('?')?'&':'?')+'language='+langId;
+        }
         return {name, imageUrl:'', cardmarketExactUrl:exact, cardmarketNameEnglish:name, set:{id:setSlug,name:setName}, source:'Cardmarket', sourceUrl:absolute};
       }
     }catch(e){}
