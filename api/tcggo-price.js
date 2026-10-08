@@ -84,7 +84,7 @@ function collectCandidates(text, code, number, name){
   };
   // Markdown links
   let m;
-  const md=/\]\((https?:\/\/(?:www\.)?tcggo\.com\/pokemon\/[^)\s]+)\)/gi;
+  const md=/\]\((https?:\/\/(?:www\.)?tcggo\.com\/pokemon(?:-jp)?\/[^)\s]+)\)/gi;
   while((m=md.exec(text))){
     const start=Math.max(0,m.index-500), end=Math.min(text.length,m.index+m[0].length+500);
     add(m[1],text.slice(start,end));
@@ -96,7 +96,7 @@ function collectCandidates(text, code, number, name){
     add(m[0],text.slice(start,end));
   }
   // HTML hrefs, if proxy returned HTML
-  const href=/href=["'](\/pokemon\/[^"']+)["']/gi;
+  const href=/href=["'](\/pokemon(?:-jp)?\/[^"']+)["']/gi;
   while((m=href.exec(text))){
     const start=Math.max(0,m.index-700), end=Math.min(text.length,m.index+m[0].length+700);
     add(m[1],text.slice(start,end));
@@ -268,7 +268,7 @@ async function apiLookup({name,number,cardmarketId,code,steps,add}){
     source:'TCGGO API'
   };
 }
-async function publicSearch({name,number,code,steps,add}){
+async function publicSearch({name,number,code,language,steps,add}){
   const nums=searchNumberVariants(code,number);
   const queries=[];
   const seenQueries=new Set();
@@ -284,9 +284,12 @@ async function publicSearch({name,number,code,steps,add}){
 
   for(const n of nums){
     const isPromo=/^(MEP|SVP)$/i.test(code);
-    const forms=isPromo
-      ? [`${code}-${n}`,`${code} ${n}`]
-      : [`${code} ${n}`,`${code}-${n}`];
+    const isJapanese=/^Japon[eé]s$/i.test(language||'') || /^Japanese$/i.test(language||'');
+    const forms=isJapanese
+      ? [`${code}-${String(n).padStart(3,'0')}`]
+      : (isPromo
+        ? [`${code}-${n}`,`${code} ${n}`]
+        : [`${code} ${n}`,`${code}-${n}`]);
     for(const q of forms)addQuery(q);
     if(name){
       addQuery(`${name} ${n}`);
@@ -396,7 +399,7 @@ module.exports = async function handler(req,res){
       }
     }
     if(!card?.url){
-      const publicUrl=await publicSearch({name,number,code,steps,add});
+      const publicUrl=await publicSearch({name,number,code,language,steps,add});
       if(publicUrl)card={url:publicUrl,name,cardNumber:number,source:'TCGGO public search'};
     }
     if(!card?.url){
