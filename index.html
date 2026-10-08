@@ -805,7 +805,7 @@ function buildCardmarketExactUrl(x){
       u.searchParams.set('language',String(cardmarketLanguageIdFor(x)));
       u.searchParams.delete('idLanguage');
       return u.toString();
-    }catch(e){}
+    }catch(e){ return apiExact; }
   }
 
   // Para el resto de cartas, si TCGdex nos entrega idProduct lo conservamos como respaldo.
@@ -1098,11 +1098,11 @@ function setCardmarketLink(x){
   // Última garantía para japonesas: Cardmarket's web filter MUST receive language=7.
   // Esto corrige incluso una URL exacta que venga de TCGdex/servidor con language=1.
   const jp=isJapaneseSetCode(String(x?.set_code||x?.expansion_code||x?.code||'').trim().toUpperCase()) || String(x?.lang||x?.language||'').trim()==='Japonés';
-  if(url && isCardmarketUrl(url)){
+  if(jp && url && isCardmarketUrl(url)){
     try{
       const u=new URL(url);
-      u.searchParams.set('language',String(jp?7:cardmarketLanguageIdFor(x)));
-      if(!jp) u.searchParams.delete('idLanguage');
+      u.searchParams.set('language','7');
+      u.searchParams.delete('idLanguage');
       url=u.toString();
     }catch(e){}
   }
@@ -1476,16 +1476,9 @@ async function fetchPokeItemPrice(x,reason){
       renderPokeItemDiag(trace,true);
       return j;
     }
-    if(code==='PFL' && typeof window.updateTCGGOPrice==='function'){
-      renderPokeItemDiag((trace.length?trace:['❌ PokéItem sin resultado']).concat(['↪ Respaldo PFL: TCGGO con los mismos datos de plantilla…']),null);
-      return await window.updateTCGGOPrice({...x,kind:x?.kind||currentKind,lang:language,reason:'Respaldo PFL tras fallo de PokéItem'});
-    }
     renderPokeItemDiag(trace.length?trace:['❌ '+String(j?.error||('HTTP '+r.status))],false);
     return j;
   }catch(e){
-    if(code==='PFL' && typeof window.updateTCGGOPrice==='function'){
-      return await window.updateTCGGOPrice({...x,kind:x?.kind||currentKind,lang:language,reason:'Respaldo PFL tras error de PokéItem'});
-    }
     renderPokeItemDiag(['❌ Error consultando PokéItem: '+String(e?.message||e)],false);
     return null;
   }
@@ -1577,7 +1570,7 @@ async function saveItem(){
     cardmarketNameEnglish:String(recognition.cardmarketNameEnglish||'').trim(),
     marketUrl:(()=>{const draft={...recognition,kind:currentKind||'card'};return getCardmarketUrl(draft)||'';})(),
     marketUrlExact:'',
-    cardmarketLanguageId:(String(document.getElementById('lang')?.value||'Inglés')==='Español'?4:1),
+    cardmarketLanguageId:cardmarketLanguageIdFor({lang:document.getElementById('lang')?.value||'Inglés'}),
     imageUrl:String(recognition.imageUrl||recognition.image_url||recognition.cardImage||recognition.card_image||recognition.image||'').trim(),
     setTotal:Number(recognition.setTotal||recognition.set_total||recognition.total_cards||recognition.card_count||recognition.total||0)||0
   };
