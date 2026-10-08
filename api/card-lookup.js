@@ -107,7 +107,7 @@ async function findCardmarketExact(code, number, preferredLang='en', englishName
         if(name) name=name.replace(/\bEx\b/g,'ex');
         const setName=decodeURIComponent(setSlug).replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
         const langId=({es:4,en:1,fr:2,de:3,it:5,pt:8,ja:7,ko:10}[String(preferredLang||'en').toLowerCase()]||1);
-        const exact=absolute+(absolute.includes('?')?'&':'?')+'language='+langId;
+        const exact=absolute+(absolute.includes('?')?'&':'?')+'language='+langId+'&idLanguage='+langId;
         return {name, imageUrl:'', cardmarketExactUrl:exact, cardmarketNameEnglish:name, set:{id:setSlug,name:setName}, source:'Cardmarket', sourceUrl:absolute};
       }
     }catch(e){}
