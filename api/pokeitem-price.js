@@ -25,10 +25,8 @@ function slugify(s){
   return decodeEntities(String(s||''))
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/œ/gi,'oe').replace(/æ/gi,'ae')
-    .toLowerCase()
-    .replace(/['’]/g,'')
-    .replace(/[^a-z0-9]+/g,'-')
-    .replace(/^-+|-+$/g,'');
+    .toLowerCase().replace(/[’']/g,'')
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
 }
 
 function numberOnly(raw){
@@ -44,6 +42,10 @@ const LANG_ROW={
   'Italiano':'Italien'
 };
 
+function normalizeText(s){
+  return decodeEntities(String(s||'')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+}
+
 function parseCardmarketNm(text, language){
   const wanted=LANG_ROW[language];
   if(!wanted) return {price:null,reason:'Idioma no soportado por la línea Cardmarket de PokéItem'};
@@ -54,54 +56,79 @@ function parseCardmarketNm(text, language){
   if(!row) return {price:null,reason:'No se encontró la fila de '+wanted+' en la tabla de idiomas'};
   const nums=[...String(row[0]).matchAll(/(\d+(?:[.,]\d{1,2})?)\s*€/g)].map(m=>Number(m[1].replace(/\./g,'').replace(',','.'))).filter(Number.isFinite);
   if(nums.length<2) return {price:null,reason:'Se encontró la fila, pero no se pudo separar PokéItem de Cardmarket NM'};
-  // Primera cifra = índice PokéItem; segunda = Cardmarket (Near Mint).
   return {price:nums[1],pokItemPrice:nums[0],row:row[0]};
 }
 
-async function tcgdexFrenchCard(setId, number, code){
-  const id=String(setId||'').trim();
-  const n=String(number||'').split('/')[0].trim();
-  const cleanCode=String(code||'').trim().toUpperCase();
-  const candidates=[];
-  if(id){
-    candidates.push(`https://api.tcgdex.net/v2/fr/sets/${encodeURIComponent(id)}/${encodeURIComponent(n)}`);
-    candidates.push(`https://api.tcgdex.net/v2/fr/cards/${encodeURIComponent(id+'-'+n)}`);
-  }
-  if(!candidates.length && cleanCode){
-    const sr=await fetch('https://api.tcgdex.net/v2/fr/sets',{headers:{Accept:'application/json'},cache:'no-store'});
-    if(sr.ok){
-      const sets=await sr.json();
-      const wanted=cleanCode.replace(/[^A-Z0-9]/g,'');
-      const found=Array.isArray(sets)?sets.find(s=>{
-        const a=String(s?.id||'').replace(/[^A-Z0-9]/g,'').toUpperCase();
-        const b=String(s?.code||s?.setCode||'').replace(/[^A-Z0-9]/g,'').toUpperCase();
-        return a===wanted||b===wanted;
-      }):null;
-      if(found?.id){
-        const sid=String(found.id);
-        candidates.push(`https://api.tcgdex.net/v2/fr/sets/${encodeURIComponent(sid)}/${encodeURIComponent(n)}`);
-        candidates.push(`https://api.tcgdex.net/v2/fr/cards/${encodeURIComponent(sid+'-'+n)}`);
-      }
-    }
-  }
-  for(const url of [...new Set(candidates)]){
-    try{
-      const r=await fetch(url,{headers:{Accept:'application/json'},cache:'no-store'});
-      if(!r.ok)continue;
-      const c=await r.json();
-      if(c?.name && c?.set?.name) return c;
-    }catch(e){}
-  }
-  return null;
-}
-
 async function fetchPage(url){
-  const r=await fetch(url,{headers:{
-    'User-Agent':'Mozilla/5.0 (compatible; PokeScan/1.0)',
-    'Accept':'text/html,application/xhtml+xml'
-  },redirect:'follow',cache:'no-store'});
+  const r=await fetch(url,{headers:{'User-Agent':'Mozilla/5.0 (compatible; PokeScan/1.0)','Accept':'text/html,application/xhtml+xml'},redirect:'follow',cache:'no-store'});
   const html=await r.text();
   return {ok:r.ok,status:r.status,url:r.url,html};
+}
+
+function extractLinks(html){
+  const out=[];
+  const re=/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while((m=re.exec(String(html||'')))){
+    const href=decodeEntities(m[1]);
+    const text=stripHtml(m[2]);
+    if(href) out.push({href,text});
+  }
+  return out;
+}
+
+function absolutePokeItemUrl(href){
+  const h=String(href||'').trim();
+  if(!h) return '';
+  if(/^https?:\/\//i.test(h)) return h;
+  if(h.startsWith('/')) return 'https://app.pokeitem.fr'+h;
+  return 'https://app.pokeitem.fr/'+h;
+}
+
+async function findSetPage(expansion, code, trace){
+  const catalog=await fetchPage('https://app.pokeitem.fr/collection/cartes');
+  trace.push('2. PokéItem catálogo: HTTP '+catalog.status);
+  if(!catalog.ok) return null;
+  const links=extractLinks(catalog.html);
+  const wanted=normalizeText(expansion);
+  const codeNorm=normalizeText(code).replace(/ /g,'');
+  const candidates=links.filter(x=>/\/collection\/cartes\//i.test(x.href));
+  let best=null,score=-1;
+  for(const x of candidates){
+    const t=normalizeText(x.text);
+    let s=0;
+    if(wanted && t===wanted)s+=100;
+    if(wanted && t.includes(wanted))s+=70;
+    if(wanted && wanted.includes(t) && t.length>2)s+=50;
+    if(codeNorm && t.replace(/ /g,'')===codeNorm)s+=80;
+    if(/pokemon 151/.test(t) && /151/.test(wanted))s+=90;
+    if(s>score){score=s;best=x;}
+  }
+  if(!best || score<50) return null;
+  const url=absolutePokeItemUrl(best.href);
+  trace.push('3. Expansión PokéItem: '+best.text+' → '+url.replace('https://app.pokeitem.fr',''));
+  const page=await fetchPage(url);
+  trace.push('4. HTTP '+page.status+': '+page.url.replace('https://app.pokeitem.fr',''));
+  return page.ok?page:null;
+}
+
+function findCardLink(html, number, name){
+  const links=extractLinks(html).filter(x=>/\/carte\//i.test(x.href));
+  const n=String(number||'').trim().replace(/^0+(?=\d)/,'');
+  const wanted=normalizeText(name);
+  let best=null,score=-1;
+  for(const x of links){
+    const t=normalizeText(x.text);
+    const href=String(x.href);
+    const m=t.match(/^(\d+)\s*(?:[·•\-:]|$)/);
+    const hrefNum=(href.match(/\/(\d+)-/i)||[])[1]||'';
+    let s=0;
+    if(m && m[1]===n)s+=100;
+    if(hrefNum===n)s+=90;
+    if(wanted && t.includes(wanted))s+=35;
+    if(s>score){score=s;best=x;}
+  }
+  return score>=90?best:null;
 }
 
 module.exports = async function handler(req,res){
@@ -112,48 +139,38 @@ module.exports = async function handler(req,res){
     const code=String(body.code||'').trim().toUpperCase();
     const number=numberOnly(body.number);
     const language=String(body.language||'Español').trim();
-    const setId=String(body.setId||body.tcgdexSetId||'').trim();
     const name=String(body.name||'').trim();
+    const expansion=String(body.expansion||'').trim();
     if(!code||!number) return res.status(400).json({ok:false,error:'Faltan código o número',trace});
     if(language==='Japonés') return res.status(400).json({ok:false,skipped:true,error:'Japonés: se mantiene el sistema actual',trace:['⏭ Japonés: no se consulta PokéItem']});
     if(!LANG_ROW[language]) return res.status(400).json({ok:false,error:'Idioma europeo no soportado por PokéItem: '+language,trace});
 
     trace.push('1. Datos: '+code+' '+number+' · '+language);
-    const card=await tcgdexFrenchCard(setId,number,code);
+    trace.push('2. Datos disponibles: '+(name||'sin nombre')+' · '+(expansion||'sin expansión'));
+    const setPage=await findSetPage(expansion,code,trace);
+    if(!setPage){
+      trace.push('5. No se encontró la expansión en el catálogo de PokéItem');
+      return res.status(404).json({ok:false,error:'No se encontró la expansión en PokéItem',trace});
+    }
+    const card=findCardLink(setPage.html,number,name);
     if(!card){
-      trace.push('2. TCGdex FR: no encontró la carta');
-      return res.status(404).json({ok:false,error:'No se pudo obtener la ficha francesa para construir la URL de PokéItem',trace});
+      trace.push('5. No se encontró '+number+(name?' · '+name:'')+' dentro de la expansión');
+      return res.status(404).json({ok:false,error:'No se encontró la carta dentro de la expansión de PokéItem',trace});
     }
-    trace.push('2. TCGdex FR: '+String(card.name)+' · '+String(card.set.name));
-    const localId=String(card.localId||number).trim();
-    const frName=String(card.name).trim();
-    const frSet=String(card.set.name).trim();
-    const base='https://app.pokeitem.fr/carte/'+slugify(frSet)+'/'+encodeURIComponent(localId)+'-'+slugify(frName);
-    const candidates=[base,base.replace('/carte/','/fr/carte/'),base.replace('/carte/','/en/carte/')];
-    trace.push('3. PokéItem URL: '+base.replace('https://app.pokeitem.fr',''));
-
-    let page=null;
-    for(const url of candidates){
-      try{
-        const p=await fetchPage(url);
-        trace.push('4. HTTP '+p.status+': '+p.url.replace('https://app.pokeitem.fr',''));
-        if(p.ok){page=p;break;}
-      }catch(e){trace.push('4. Error URL: '+String(e?.message||e));}
-    }
-    if(!page){
-      return res.status(404).json({ok:false,error:'PokéItem no encontró la ficha con la ruta construida',trace,debug:{frName,frSet,localId,candidates}});
-    }
-
-    const text=stripHtml(page.html);
-    const parsed=parseCardmarketNm(text,language);
+    const cardUrl=absolutePokeItemUrl(card.href);
+    trace.push('5. Carta encontrada: '+stripHtml(card.text)+' → '+cardUrl.replace('https://app.pokeitem.fr',''));
+    const page=await fetchPage(cardUrl);
+    trace.push('6. HTTP '+page.status+': '+page.url.replace('https://app.pokeitem.fr',''));
+    if(!page.ok) return res.status(404).json({ok:false,error:'La ficha de la carta no se pudo abrir',trace});
+    const parsed=parseCardmarketNm(stripHtml(page.html),language);
     if(parsed.price===null){
-      trace.push('5. Ficha abierta, pero no se encontró Cardmarket NM '+language);
-      return res.status(404).json({ok:false,error:parsed.reason,trace,debug:{frName,frSet,localId,url:page.url,language}});
+      trace.push('7. Ficha abierta, pero no se encontró Cardmarket NM '+language);
+      return res.status(404).json({ok:false,error:parsed.reason,trace});
     }
-    trace.push('5. Cardmarket NM '+language+': '+parsed.price.toFixed(2)+' €');
-    return res.status(200).json({ok:true,price:parsed.price,url:page.url,trace,source:'PokéItem → Cardmarket Near Mint',frName,frSet,localId,pokItemPrice:parsed.pokItemPrice||null});
+    trace.push('7. Cardmarket NM '+language+': '+parsed.price.toFixed(2)+' €');
+    return res.status(200).json({ok:true,price:parsed.price,url:page.url,trace,source:'PokéItem → Cardmarket Near Mint',pokItemPrice:parsed.pokItemPrice||null});
   }catch(e){
     trace.push('ERROR: '+String(e?.message||e));
     return res.status(500).json({ok:false,error:String(e?.message||e||'Error interno'),trace});
   }
-}
+};
