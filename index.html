@@ -1117,6 +1117,12 @@ function setCardmarketLink(x){
   const box=document.getElementById('marketLinkBox');
   const link=document.getElementById('marketLink');
   if(!box||!link)return;
+  // El idioma REAL de la carta es siempre el selector actual de PokeScan.
+  // Algunas fichas exactas (como BLK) llegan sin lang en el objeto, mientras
+  // que otras (como DRI) ya lo traen. Unificamos ambos caminos antes de generar
+  // Cardmarket para que BLK use exactamente el mismo mecanismo que DRI.
+  const selectedLang=String(document.getElementById('lang')?.value||x?.lang||x?.language||'Inglés').trim();
+  x={...x,lang:selectedLang,language:selectedLang};
   const exact=(x.kind==='card'||x.kind==='graded')?getCardmarketUrl(x):'';
   let url=exact||((x.kind==='card'||x.kind==='graded')?buildCardmarketSearchUrl(x):(x.marketUrl||buildCardmarketSearchUrl(x)));
   // Última garantía para japonesas: Cardmarket's web filter MUST receive language=7.
