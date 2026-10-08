@@ -18,11 +18,26 @@ module.exports = async function handler(req, res) {
 
     const strip=s=>String(s||'')
       .replace(/<[^>]+>/g,' ')
-      .replace(/&amp;/gi,'&').replace(/&#39;|&#x27;/gi,"'")
-      .replace(/&quot;|&#x22;/gi,'"').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>')
+      .replace(/&amp;/gi,'&').replace(/&#39;|&#x27;|&#039;/gi,"'")
+      .replace(/&quot;|&#x22;|&#034;/gi,'"').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>')
+      .replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n)))
+      .replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCharCode(parseInt(n,16)))
       .replace(/\s+/g,' ').trim();
 
     const cleanText=s=>strip(String(s||'').replace(/\s+/g,' '));
+    const decodeEntities=s=>String(s||'')
+      .replace(/&amp;/gi,'&').replace(/&#39;|&#x27;|&#039;/gi,"'")
+      .replace(/&quot;|&#x22;|&#034;/gi,'\"')
+      .replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n)))
+      .replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCharCode(parseInt(n,16)));
+    const cardmarketSearchName=s=>{
+      let v=decodeEntities(s).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+      // Cardmarket indexes many Japanese trainer-Pokémon cards by the Pokémon
+      // species name rather than the trainer prefix (e.g. "Cynthia's Roserade"
+      // -> "Roserade", "Cynthia's Garchomp ex" -> "Garchomp ex").
+      v=v.replace(/^[^\s]+(?:['’]s)\s+/i,'');
+      return v.trim();
+    };
     const extractCandidates=html=>{
       const out=[];
       const push=v=>{v=cleanText(v); if(v && !out.includes(v)) out.push(v)};
@@ -140,6 +155,7 @@ module.exports = async function handler(req, res) {
       japaneseName,
       englishName,
       cardmarketNameEnglish: englishName,
+      cardmarketSearchName: cardmarketSearchName(englishName),
       imageUrl,
       source:'Limitless JP',
       sourceUrl

@@ -7,7 +7,7 @@ async function findLimitlessEnglishName(code, number) {
   const variants=[...new Set([c,c.toLowerCase(),/^[A-Z]{1,4}\d+[A-Z]$/.test(c)?c.slice(0,-1)+c.slice(-1).toLowerCase():c])];
   const extract=html=>{
     const vals=[];
-    const push=v=>{v=String(v||'').replace(/<[^>]+>/g,' ').replace(/&amp;/gi,'&').replace(/&#39;|&#x27;/gi,"'").replace(/&quot;|&#x22;/gi,'"').replace(/\s+/g,' ').trim();if(v&&!vals.includes(v))vals.push(v)};
+    const push=v=>{v=String(v||'').replace(/<[^>]+>/g,' ').replace(/&amp;/gi,'&').replace(/&#39;|&#x27;|&#039;/gi,"'").replace(/&quot;|&#x22;/gi,'"').replace(/\s+/g,' ').trim();if(v&&!vals.includes(v))vals.push(v)};
     for(const re of [
       /<h1[^>]*>([\s\S]*?)<\/h1>/i,
       /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
@@ -37,6 +37,21 @@ async function findLimitlessEnglishName(code, number) {
   return '';
 }
 
+function decodeHtmlEntities(s){
+  return String(s||'')
+    .replace(/&amp;/gi,'&').replace(/&#39;|&#x27;|&#039;/gi,"'")
+    .replace(/&quot;|&#x22;|&#034;/gi,'\"')
+    .replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCharCode(parseInt(n,16)));
+}
+function cardmarketSearchName(s){
+  let v=decodeHtmlEntities(s).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+  // For Japanese trainer-Pokémon cards Cardmarket search works reliably with
+  // the Pokémon name plus collector number, without the trainer prefix.
+  v=v.replace(/^[^\s]+(?:['’]s)\s+/i,'');
+  return v.trim();
+}
+
 async function findCardmarketExact(code, number, preferredLang='en', englishName='') {
   const cleanCode=String(code||'').trim().toUpperCase();
   const rawNum=String(number||'').split('/')[0].trim();
@@ -47,16 +62,16 @@ async function findCardmarketExact(code, number, preferredLang='en', englishName
   // Probamos primero ese formato para no caer en una búsqueda vacía.
   const padded=cleanNum.replace(/^0+/,'').padStart(3,'0');
   const enName=String(englishName||'').trim();
-  // Para japonesas Cardmarket no siempre indexa la búsqueda por código+número.
-  // Su catálogo utiliza el nombre internacional de la carta (p. ej.
-  // Ethan's Ho-Oh ex) junto al número. Por eso probamos primero nombre inglés +
-  // número/código y dejamos las consultas antiguas como respaldo.
-  const nameQueries=enName ? [
-    enName+' '+padded,
-    enName+' '+cleanNum,
-    enName+' '+cleanCode+' '+padded,
-    enName+' '+cleanCode+' '+cleanNum
-  ] : [];
+  const basicName=cardmarketSearchName(enName);
+  // Cardmarket puede catalogar las japonesas con el nombre inglés completo,
+  // pero para cartas de Pokémon con entrenador (Cynthia's Roserade, Cynthia's
+  // Garchomp ex, Ethan's Ho-Oh ex, etc.) la búsqueda más estable es el nombre
+  // básico del Pokémon + código + número.
+  const nameVariants=[...new Set([basicName,enName].filter(Boolean))];
+  const nameQueries=[];
+  for(const nm of nameVariants){
+    nameQueries.push(nm+' '+padded,nm+' '+cleanNum,nm+' '+cleanCode+' '+padded,nm+' '+cleanCode+' '+cleanNum);
+  }
   const queries=[...new Set([...nameQueries, cleanCode+' '+padded, cleanCode+' '+rawNum, cleanCode+padded, cleanCode+rawNum, ...numCandidates.map(n=>cleanCode+' '+n)])];
   for(const q of queries){
     const url='https://www.cardmarket.com/en/Pokemon/Products/Search?searchString='+encodeURIComponent(q)+'&searchMode=v2&mode=gallery';
@@ -76,7 +91,7 @@ async function findCardmarketExact(code, number, preferredLang='en', englishName
         const compact=tail.replace(/[^A-Za-z0-9]/g,'').toUpperCase();
         const wantedCandidates=numCandidates.map(n=>(cleanCode+n).replace(/[^A-Za-z0-9]/g,'').toUpperCase());
         const matchedMarker=wantedCandidates.find(w=>compact.endsWith(w));
-        const nameQueryUsed=enName && q.toLowerCase().includes(enName.toLowerCase());
+        const nameQueryUsed=(basicName && q.toLowerCase().includes(basicName.toLowerCase())) || (enName && q.toLowerCase().includes(enName.toLowerCase()));
         // En consultas por nombre, Cardmarket puede devolver la ficha con un
         // sufijo V1/V2 que no coincide literalmente con el marcador compacto.
         // El propio resultado de la búsqueda ya viene filtrado por nombre; aun así
@@ -111,7 +126,7 @@ module.exports = async function handler(req, res) {
     if(!localId||(!setId&&!code))return res.status(400).json({error:'Faltan código y número de carta.'});
     const cleanNum=localId.split('/')[0].trim();
     const uniqueLangs=[...new Set(langs)];
-    const decode=s=>String(s||'').replace(/&amp;/gi,'&').replace(/&#39;|&#x27;/gi,"'").replace(/&quot;|&#x22;/gi,'"').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n))).replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCharCode(parseInt(n,16)));
+    const decode=s=>String(s||'').replace(/&amp;/gi,'&').replace(/&#39;|&#x27;|&#039;/gi,"'").replace(/&quot;|&#x22;/gi,'"').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n))).replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCharCode(parseInt(n,16)));
     const strip=x=>decode(String(x||'').replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim();
 
     // Convierte la ruta de imagen que entrega TCGdex en la URL REAL del archivo.
@@ -262,7 +277,7 @@ module.exports = async function handler(req, res) {
     if(code){
       const cm=await findCardmarketExact(code,cleanNum,uniqueLangs[0]||'en',String(body.englishName||body.cardmarketNameEnglish||'').trim());
       if(cm?.name){
-        return res.status(200).json({name:cm.name,localId:cleanNum,id:code+'-'+cleanNum,image:'',imageUrl:'',set:cm.set,cardmarketExactUrl:cm.cardmarketExactUrl,cardmarketNameEnglish:cm.cardmarketNameEnglish,source:cm.source,sourceUrl:cm.sourceUrl});
+        return res.status(200).json({name:cm.name,localId:cleanNum,id:code+'-'+cleanNum,image:'',imageUrl:'',set:cm.set,cardmarketExactUrl:cm.cardmarketExactUrl,cardmarketNameEnglish:cm.cardmarketNameEnglish,cardmarketSearchName:cardmarketSearchName(cm.cardmarketNameEnglish),source:cm.source,sourceUrl:cm.sourceUrl});
       }
     }
     return res.status(404).json({error:`No se encontró ${code?code+' ':''}${cleanNum} en las fuentes externas.`});
